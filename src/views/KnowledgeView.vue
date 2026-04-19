@@ -59,19 +59,10 @@
           </el-tag>
         </div>
 
-        <div class="case-emotion">
-          <span class="emotion-label">情感曲线</span>
-          <div class="mini-chart">
-            <svg viewBox="0 0 100 30" class="emotion-svg">
-              <polyline :points="emotionPoints(c.emotion_curve)" fill="none" stroke="#409eff"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </div>
-        </div>
-
         <div class="case-actions">
-          <el-button text type="primary" size="small">查看详情</el-button>
+          <el-button text type="primary" size="small" @click.stop="openDetail(c)">查看详情</el-button>
           <el-button text size="small" @click.stop="handleQuote(c)">引用</el-button>
+          <el-button text type="warning" size="small" @click.stop="handleReanalyze(c)">重新分析</el-button>
           <el-button text type="danger" size="small" @click.stop="handleDelete(c)">删除</el-button>
         </div>
       </el-card>
@@ -239,13 +230,25 @@
         </div>
       </template>
     </el-drawer>
+
+    <!-- 重新分析进度弹窗 -->
+    <el-dialog v-model="showReanalyzeDialog" title="重新分析" width="450px" :close-on-click-modal="false" :show-close="!reanalyzing">
+      <div class="analysis-progress">
+        <el-progress :percentage="reanalyzeProgress" :status="reanalyzeStatus === 'failed' ? 'exception' : undefined"
+          :stroke-width="16" striped striped-flow />
+        <p class="progress-text">{{ reanalyzeMessage }}</p>
+      </div>
+      <template #footer v-if="!reanalyzing">
+        <el-button type="primary" @click="showReanalyzeDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getKnowledgeCases, getKnowledgeCase, analyzeVideo, getAnalysisStatus, deleteKnowledgeCase } from '../api/knowledge'
+import { getKnowledgeCases, getKnowledgeCase, analyzeVideo, getAnalysisStatus, deleteKnowledgeCase, reanalyzeCase } from '../api/knowledge'
 import MarkdownPreview from '../components/script/MarkdownPreview.vue'
 
 const cases = ref<any[]>([])
@@ -266,6 +269,14 @@ const analysisStatus = ref('')
 const analysisMessage = ref('')
 const analysisResult = ref<any>(null)
 const markdownPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
+
+// Reanalyze state
+const showReanalyzeDialog = ref(false)
+const reanalyzing = ref(false)
+const reanalyzeProgress = ref(0)
+const reanalyzeStatus = ref('')
+const reanalyzeMessage = ref('')
+const reanalyzeCaseId = ref<number | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -449,7 +460,7 @@ function parseArray(val: any): string[] {
   return []
 }
 
-onUnmounted(() => stopPolling())
+onUnmounted(() => { stopPolling(); stopReanalyzePolling() })
 
 // 切换到分析报告 tab 时刷新内容
 watch(detailActiveTab, (tab) => {
@@ -461,6 +472,81 @@ watch(detailActiveTab, (tab) => {
 function handleQuote(c: any) {
   navigator.clipboard.writeText(String(c.id))
   ElMessage.success('案例ID已复制，可在创建项目时引用')
+}
+
+let reanalyzePollTimer: ReturnType<typeof setInterval> | null = null
+
+async function handleReanalyze(c: any) {
+  try {
+    await ElMessageBox.confirm(`确定重新分析案例「${c.title}」？将使用已有帧图片重新生成分析报告。`, '重新分析确认', {
+      confirmButtonText: '开始分析',
+      cancelButtonText: '取消',
+      type: 'info',
+    })
+  } catch {
+    return // cancelled
+  }
+
+  reanalyzing.value = true
+  reanalyzeProgress.value = 0
+  reanalyzeStatus.value = 'pending'
+  reanalyzeMessage.value = '正在提交重新分析任务...'
+  reanalyzeCaseId.value = c.id
+  showReanalyzeDialog.value = true
+
+  try {
+    const res: any = await reanalyzeCase(c.id)
+    if (!res.case_id) {
+      ElMessage.error('提交失败')
+      reanalyzing.value = false
+      return
+    }
+    reanalyzeMessage.value = '任务已提交，等待分析...'
+
+    reanalyzePollTimer = setInterval(async () => {
+      try {
+        const status: any = await getAnalysisStatus(res.case_id)
+        reanalyzeStatus.value = status.analysis_status || ''
+
+        if (status.analysis_progress != null) {
+          reanalyzeProgress.value = Math.min(95, status.analysis_progress)
+        }
+
+        const statusMessages: Record<string, string> = {
+          pending: '排队等待中...',
+          processing: '正在分析帧图片...',
+        }
+        reanalyzeMessage.value = statusMessages[reanalyzeStatus.value] || `状态: ${reanalyzeStatus.value}`
+
+        if (status.analysis_status === 'completed') {
+          stopReanalyzePolling()
+          reanalyzeProgress.value = 100
+          reanalyzeMessage.value = '分析完成!'
+          ElMessage.success('重新分析完成')
+          loadCases()
+        }
+
+        if (status.analysis_status === 'failed') {
+          stopReanalyzePolling()
+          reanalyzeProgress.value = 100
+          reanalyzeMessage.value = `分析失败: ${status.error_message || '未知错误'}`
+          ElMessage.error('重新分析失败')
+        }
+      } catch {
+        // poll request failed, ignore
+      }
+    }, 3000)
+  } catch {
+    reanalyzing.value = false
+  }
+}
+
+function stopReanalyzePolling() {
+  if (reanalyzePollTimer) {
+    clearInterval(reanalyzePollTimer)
+    reanalyzePollTimer = null
+  }
+  reanalyzing.value = false
 }
 
 async function handleDelete(c: any) {
@@ -497,9 +583,17 @@ async function handleDelete(c: any) {
 .case-card {
   cursor: pointer;
   transition: transform 0.2s;
+  display: flex;
+  flex-direction: column;
 
   &:hover {
     transform: translateY(-4px);
+  }
+
+  :deep(.el-card__body) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
   }
 
   .case-thumb {
@@ -540,6 +634,8 @@ async function handleDelete(c: any) {
     flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 8px;
+    max-height: 52px;
+    overflow: hidden;
 
     .style-tag {
       border-radius: 12px;
@@ -571,7 +667,9 @@ async function handleDelete(c: any) {
 
   .case-actions {
     display: flex;
-    justify-content: flex-start;
+    gap: 2px;
+    margin-top: auto;
+    padding-top: 4px;
   }
 }
 

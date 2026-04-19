@@ -30,6 +30,11 @@ export function deleteKnowledgeCase(caseId: number) {
   return request.delete(`/kb/cases/${caseId}`)
 }
 
+// 重新分析案例
+export function reanalyzeCase(caseId: number) {
+  return request.post(`/kb/cases/${caseId}/reanalyze`)
+}
+
 // 推荐案例
 export function recommendCases(data: { description?: string; platform?: string; limit?: number }) {
   return request.post('/kb/recommend-cases', data)

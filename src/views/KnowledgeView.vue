@@ -54,8 +54,8 @@
         </div>
 
         <div class="case-tags">
-          <el-tag v-for="tag in parseStyle(c.visual_style)" :key="tag" size="small" effect="plain" class="style-tag">
-            {{ tag }}
+          <el-tag v-if="c.theme" size="small" effect="plain" class="style-tag">
+            {{ c.theme }}
           </el-tag>
         </div>
 
@@ -380,7 +380,7 @@ async function handleAnalyze() {
       return
     }
     analysisMessage.value = '任务已提交，等待分析...'
-    analysisProgress.value = 10
+    analysisProgress.value = 5
 
     // 开始轮询
     pollTimer = setInterval(async () => {
@@ -389,8 +389,8 @@ async function handleAnalyze() {
         analysisStatus.value = status.analysis_status || status.step_status || ''
 
         // 更新进度
-        if (status.progress != null) {
-          analysisProgress.value = Math.max(10, Math.min(95, status.progress))
+        if (status.analysis_progress != null) {
+          analysisProgress.value = Math.min(95, status.analysis_progress)
         }
 
         // 更新提示信息

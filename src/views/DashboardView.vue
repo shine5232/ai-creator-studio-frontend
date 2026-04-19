@@ -48,7 +48,8 @@
       <el-col :span="6" v-for="p in projects" :key="p.id">
         <el-card shadow="hover" class="project-card" @click="$router.push(`/projects/${p.id}`)">
           <div class="project-thumb">
-            <el-icon :size="48" color="#c0c4cc"><VideoCamera /></el-icon>
+            <el-image v-if="coverUrl(p.cover_image_path)" :src="coverUrl(p.cover_image_path)" fit="cover" class="thumb-img" />
+            <el-icon v-else :size="48" color="#c0c4cc"><VideoCamera /></el-icon>
           </div>
           <div class="project-info">
             <div class="project-title">{{ p.name }}</div>
@@ -85,6 +86,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { VideoCamera } from '@element-plus/icons-vue'
 import { getProjects, createProject } from '../api/project'
 
 const router = useRouter()
@@ -105,7 +107,14 @@ async function loadData() {
   try {
     const res: any = await getProjects({ page: 1, page_size: 8 })
     projects.value = res.items || res.data || []
-    stats.projects = res.total || projects.value.length
+    if (res.stats) {
+      stats.projects = res.stats.projects || 0
+      stats.videos = res.stats.videos || 0
+      stats.aiCalls = res.stats.aiCalls || 0
+      stats.cost = res.stats.cost || '0.00'
+    } else {
+      stats.projects = res.total || projects.value.length
+    }
   } finally {
     loading.value = false
   }
@@ -141,6 +150,15 @@ function statusLabel(s: string) {
   }
   return map[s] || s || '草稿'
 }
+
+function coverUrl(path: string | null | undefined) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+  const normalized = path.replace(/\\/g, '/')
+  const servedPath = normalized.replace(/^data\//, '/static/')
+  return `${base.replace(/\/api\/v1$/, '')}${servedPath}`
+}
 </script>
 
 <style scoped lang="scss">
@@ -166,6 +184,12 @@ function statusLabel(s: string) {
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
+    overflow: hidden;
+
+    .thumb-img {
+      width: 100%;
+      height: 100%;
+    }
   }
 
   .project-info {

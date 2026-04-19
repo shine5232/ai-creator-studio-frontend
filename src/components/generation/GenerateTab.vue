@@ -13,13 +13,9 @@
     <!-- 操作按钮 -->
     <el-card style="margin-top: 16px">
       <div class="action-bar">
-        <el-button type="primary" @click="handleGenerateImages" :loading="loadingImages"
-          :disabled="!shots.length">
-          <el-icon><Picture /></el-icon> 生成所有图片
-        </el-button>
         <el-button type="primary" @click="handleGenerateVideos" :loading="loadingVideos"
-          :disabled="!imagesReady">
-          <el-icon><VideoCamera /></el-icon> 生成所有视频
+          :disabled="!imagesReady || !selectedIds.size">
+          <el-icon><VideoCamera /></el-icon> 生成视频
         </el-button>
         <el-button type="primary" @click="handleMerge" :loading="loadingMerge"
           :disabled="!videosReady">
@@ -31,48 +27,77 @@
       </div>
     </el-card>
 
-    <!-- 任务列表 -->
+    <!-- 分镜卡片列表 -->
     <el-card style="margin-top: 16px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
-          <span>任务列表</span>
-          <el-button text @click="loadTasks" :loading="loadingTasks">
-            <el-icon><Refresh /></el-icon> 刷新
-          </el-button>
+          <span>分镜列表</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <el-button size="small" @click="selectAll">全选</el-button>
+            <el-button size="small" @click="deselectAll">清空</el-button>
+            <span style="color: #909399; font-size: 13px">已选 {{ selectedIds.size }}/{{ availableShots.length }}</span>
+          </div>
         </div>
       </template>
-      <el-table :data="tasks" v-loading="loadingTasks" stripe max-height="400">
-        <el-table-column label="类型" width="100">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.service_type === 'text_to_image' ? '' : row.service_type === 'image_to_video' ? 'warning' : 'success'">
-              {{ serviceLabel(row.service_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag size="small" :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="180">
-          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column prop="error_message" label="错误信息" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="80">
-          <template #default="{ row }">
-            <el-button v-if="row.status === 'failed'" text type="primary" size="small"
-              @click="handleRetry(row.task_id)">重试</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div v-if="availableShots.length" class="select-grid">
+        <el-card v-for="(shot, index) in availableShots" :key="shot.id" class="select-card"
+          :class="{ selected: selectedIds.has(shot.id) }"
+          @click="toggleSelect(shot)">
+          <div class="select-checkbox">
+            <el-checkbox :model-value="selectedIds.has(shot.id)" />
+          </div>
+          <div class="select-thumb">
+            <el-image v-if="shot.image_path" :src="imageUrl(shot.image_path)" fit="cover" class="thumb-img" />
+            <el-icon v-else :size="32" color="#c0c4cc"><Picture /></el-icon>
+          </div>
+          <div class="select-info">
+            <div class="select-index">#{{ index + 1 }}</div>
+            <div class="select-desc">{{ shot.description || '无描述' }}</div>
+            <div class="select-bottom">
+              <el-tag size="small" :type="shot.video_status === 'completed' ? 'success' : shot.video_status === 'failed' ? 'danger' : 'info'">
+                {{ videoStatusLabel(shot.video_status) }}
+              </el-tag>
+              <el-button v-if="shot.video_status === 'completed' && shot.video_path"
+                size="small" type="primary" circle @click.stop="playVideo(shot)">
+                <el-icon><VideoPlay /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </div>
+      <el-empty v-else description="暂无已生成图片的分镜" :image-size="60" />
     </el-card>
+
+    <!-- 进度弹窗 -->
+    <el-dialog v-model="showProgressDialog" :title="progressTitle" width="460px"
+      :close-on-click-modal="false" :show-close="progressStatus === 'completed' || progressStatus === 'failed'"
+      @closed="onProgressDialogClosed">
+      <div style="text-align: center; padding: 16px 0">
+        <el-progress :percentage="progressPercent"
+          :status="progressStatus === 'failed' ? 'exception' : progressStatus === 'completed' ? 'success' : undefined"
+          :stroke-width="20" :text-inside="true" style="margin-bottom: 16px" />
+        <p style="color: #606266; font-size: 14px">{{ progressMessage }}</p>
+      </div>
+      <template #footer>
+        <el-button v-if="progressStatus === 'completed' || progressStatus === 'failed'"
+          @click="showProgressDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 视频播放弹窗 -->
+    <el-dialog v-model="showVideoDialog" title="视频预览" width="640px" @closed="videoUrl = ''">
+      <div style="text-align: center">
+        <video v-if="videoUrl" :src="videoUrl" controls autoplay style="max-width: 100%; max-height: 500px" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { generateImages, generateVideos, mergeVideos, addMusic, getTasks, retryTask } from '../../api/generation'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Picture, VideoCamera, Connection, Headset, VideoPlay } from '@element-plus/icons-vue'
+import { mergeVideos, addMusic, getTask, batchGenerateShotVideos } from '../../api/generation'
 
 const props = defineProps<{
   projectId: string
@@ -80,18 +105,39 @@ const props = defineProps<{
   shots: any[]
 }>()
 
-const tasks = ref<any[]>([])
-const loadingTasks = ref(false)
-const loadingImages = ref(false)
+const emit = defineEmits<{
+  (e: 'refresh'): void
+}>()
+
 const loadingVideos = ref(false)
 const loadingMerge = ref(false)
 const loadingMusic = ref(false)
 
-let pollTimer: ReturnType<typeof setInterval> | null = null
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
 const imagesReady = computed(() => (props.shots || []).some((s: any) => s.image_status === 'completed'))
 const videosReady = computed(() => (props.shots || []).some((s: any) => s.video_status === 'completed'))
 const merged = ref(false)
+
+// 分镜选择
+const selectedIds = ref<Set<number>>(new Set())
+const availableShots = computed(() => (props.shots || []).filter((s: any) => s.image_status === 'completed'))
+
+// 进度弹窗
+const showProgressDialog = ref(false)
+const progressTitle = ref('')
+const progressPercent = ref(0)
+const progressMessage = ref('')
+const progressStatus = ref<'running' | 'completed' | 'failed'>('running')
+
+// 视频播放
+const showVideoDialog = ref(false)
+const videoUrl = ref('')
+
+function playVideo(shot: any) {
+  videoUrl.value = imageUrl(shot.video_path)
+  showVideoDialog.value = true
+}
 
 const currentStep = computed(() => {
   if (merged.value) return 4
@@ -100,26 +146,11 @@ const currentStep = computed(() => {
   return 0
 })
 
-onMounted(() => {
-  loadTasks()
-  pollTimer = setInterval(loadTasks, 15000)
-})
+onMounted(() => {})
 
 onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
+  stopProgressPolling()
 })
-
-async function loadTasks() {
-  loadingTasks.value = true
-  try {
-    const res: any = await getTasks({ project_id: props.projectId })
-    tasks.value = Array.isArray(res) ? res : (res.items || res.data || [])
-  } catch {
-    tasks.value = []
-  } finally {
-    loadingTasks.value = false
-  }
-}
 
 function stepDesc(step: number) {
   const shots = props.shots || []
@@ -134,35 +165,124 @@ function stepDesc(step: number) {
   return ''
 }
 
-async function handleGenerateImages() {
-  loadingImages.value = true
-  try {
-    await generateImages(props.projectId)
-    ElMessage.success('图片生成任务已提交')
-    loadTasks()
-  } finally {
-    loadingImages.value = false
-  }
+// ─── 分镜选择 ───
+
+function toggleSelect(shot: any) {
+  const ids = new Set(selectedIds.value)
+  if (ids.has(shot.id)) ids.delete(shot.id)
+  else ids.add(shot.id)
+  selectedIds.value = ids
+}
+
+function selectAll() {
+  selectedIds.value = new Set(availableShots.value.map((s: any) => s.id))
+}
+
+function deselectAll() {
+  selectedIds.value = new Set()
 }
 
 async function handleGenerateVideos() {
+  const ids = Array.from(selectedIds.value)
+  if (!ids.length) {
+    ElMessage.warning('请先选择要生成视频的分镜')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `将为选中的 ${ids.length} 个分镜批量生成视频，是否继续？`,
+      '确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'info' },
+    )
+  } catch {
+    return
+  }
+
   loadingVideos.value = true
   try {
-    await generateVideos(props.projectId)
-    ElMessage.success('视频生成任务已提交')
-    loadTasks()
+    const data: any = await batchGenerateShotVideos(props.projectId, { shot_ids: ids })
+    if (!data.task_id) {
+      ElMessage.info(data.message || '没有待生成的分镜视频')
+      return
+    }
+    startProgressPolling(data.task_id, '批量生成分镜视频', data.total || ids.length)
+  } catch {
+    ElMessage.error('批量生成分镜视频失败')
   } finally {
     loadingVideos.value = false
   }
 }
 
+function videoStatusLabel(status: string) {
+  const map: Record<string, string> = { pending: '待生成', processing: '生成中', completed: '已完成', failed: '失败' }
+  return map[status] || '待生成'
+}
+
+// ─── 进度弹窗 ───
+
+function startProgressPolling(taskId: string, title: string, total: number, onComplete?: () => void) {
+  progressTitle.value = title
+  progressPercent.value = 0
+  progressMessage.value = `正在处理 0/${total} ...`
+  progressStatus.value = 'running'
+  showProgressDialog.value = true
+
+  if (progressTimer) clearInterval(progressTimer)
+  progressTimer = setInterval(async () => {
+    try {
+      const data: any = await getTask(taskId)
+      const progress = data.progress ?? 0
+      progressPercent.value = progress
+      progressMessage.value = data.message || `正在处理 ... ${progress}%`
+
+      if (data.status === 'completed') {
+        progressStatus.value = 'completed'
+        progressPercent.value = 100
+        progressMessage.value = '处理完成'
+        stopProgressPolling()
+        onComplete?.()
+      } else if (data.status === 'failed') {
+        progressStatus.value = 'failed'
+        progressMessage.value = data.error_message || '处理失败'
+        stopProgressPolling()
+      }
+    } catch {
+      // 忽略轮询错误
+    }
+  }, 2000)
+}
+
+function stopProgressPolling() {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
+function onProgressDialogClosed() {
+  emit('refresh')
+}
+
+// ─── 其他操作 ───
+
 async function handleMerge() {
+  const ids = Array.from(selectedIds.value)
+  if (!ids.length) {
+    ElMessage.warning('请先选择要合并的分镜')
+    return
+  }
+
   loadingMerge.value = true
   try {
-    await mergeVideos(props.projectId)
-    ElMessage.success('合并任务已提交')
-    merged.value = true
-    loadTasks()
+    const data: any = await mergeVideos(props.projectId, { shot_ids: ids })
+    if (!data.task_id) {
+      ElMessage.info(data.message || '合并任务创建失败')
+      return
+    }
+    startProgressPolling(data.task_id, '合并视频', ids.length, () => { merged.value = true })
+  } catch {
+    ElMessage.error('合并视频失败')
   } finally {
     loadingMerge.value = false
   }
@@ -173,38 +293,18 @@ async function handleAddMusic() {
   try {
     await addMusic(props.projectId)
     ElMessage.success('添加音乐任务已提交')
-    loadTasks()
   } finally {
     loadingMusic.value = false
   }
 }
 
-async function handleRetry(taskId: string) {
-  await retryTask(taskId)
-  ElMessage.success('已重试')
-  loadTasks()
-}
-
-function serviceLabel(t: string) {
-  const map: Record<string, string> = {
-    text_to_image: '图片', image_to_video: '视频', merge: '合并', music: '音乐',
-  }
-  return map[t] || t
-}
-
-function statusType(s: string) {
-  const map: Record<string, string> = { completed: 'success', failed: 'danger', processing: 'warning' }
-  return map[s] || 'info'
-}
-
-function statusLabel(s: string) {
-  const map: Record<string, string> = { pending: '排队中', processing: '处理中', completed: '已完成', failed: '失败' }
-  return map[s] || s
-}
-
-function formatTime(t: string) {
-  if (!t) return ''
-  return new Date(t).toLocaleString('zh-CN')
+function imageUrl(path: string) {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+  const normalized = path.replace(/\\/g, '/')
+  const servedPath = normalized.replace(/^data\//, '/static/')
+  return `${base.replace(/\/api\/v1$/, '')}${servedPath}`
 }
 </script>
 
@@ -219,5 +319,79 @@ function formatTime(t: string) {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.select-card {
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  &.selected {
+    border-color: var(--el-color-primary);
+    background: #ecf5ff;
+  }
+
+  :deep(.el-card__body) {
+    padding: 0;
+  }
+
+  .select-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 1;
+  }
+
+  .select-thumb {
+    height: 100px;
+    background: #f5f7fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    .thumb-img {
+      width: 100%;
+      height: 100%;
+    }
+  }
+
+  .select-info {
+    padding: 8px 10px;
+
+    .select-index {
+      font-size: 12px;
+      color: #909399;
+      margin-bottom: 4px;
+    }
+
+    .select-desc {
+      font-size: 12px;
+      color: #606266;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      margin-bottom: 4px;
+    }
+
+    .select-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
 }
 </style>

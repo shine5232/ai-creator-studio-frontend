@@ -34,10 +34,12 @@ onMounted(async () => {
 })
 
 const videoUrl = computed(() => {
-  if (!project.value?.output_path) return ''
-  if (project.value.output_path.startsWith('http')) return project.value.output_path
-  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-  return `${base}${project.value.output_path}`
+  if (!project.value?.output_video_path) return ''
+  if (project.value.output_video_path.startsWith('http')) return project.value.output_video_path
+  const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+  const normalized = project.value.output_video_path.replace(/\\/g, '/')
+  const servedPath = normalized.replace(/^data\//, '/static/')
+  return `${base.replace(/\/api\/v1$/, '')}${servedPath}`
 })
 
 const videoInfo = computed(() => {

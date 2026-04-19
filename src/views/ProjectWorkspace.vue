@@ -16,11 +16,11 @@
       </el-tab-pane>
 
       <el-tab-pane label="分镜" name="storyboard" :disabled="!script">
-        <StoryboardTab :script-id="scriptId" :storyboard="storyboard" @refresh="loadStoryboard" />
+        <StoryboardTab :project-id="projectId" :script-id="scriptId" :storyboard="storyboard" @refresh="loadStoryboard" />
       </el-tab-pane>
 
       <el-tab-pane label="生成" name="generate">
-        <GenerateTab :project-id="projectId" :storyboard="storyboard" :shots="shots" />
+        <GenerateTab :project-id="projectId" :storyboard="storyboard" :shots="shots" @refresh="loadStoryboard" />
       </el-tab-pane>
 
       <el-tab-pane label="预览" name="preview">
@@ -79,8 +79,9 @@ async function loadStoryboard() {
   }
 }
 
-function onScriptLoaded(s: any) {
+async function onScriptLoaded(s: any) {
   script.value = s
+  await loadStoryboard()
 }
 
 function onScriptSaved(s: any) {
@@ -88,7 +89,7 @@ function onScriptSaved(s: any) {
 }
 
 function onTabChange(name: string) {
-  if (name === 'storyboard') loadStoryboard()
+  if (name === 'storyboard' || name === 'generate') loadStoryboard()
 }
 </script>
 

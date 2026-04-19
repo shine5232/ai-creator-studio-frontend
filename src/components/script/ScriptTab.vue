@@ -254,23 +254,9 @@
             </el-form-item>
           </el-form>
 
-          <el-button type="primary" :loading="generating" @click="handleGenerate" style="width: 100%; margin-bottom: 12px">
+          <el-button type="primary" :loading="generating" @click="handleGenerate" style="width: 100%">
             AI 生成脚本
           </el-button>
-
-          <el-button :loading="analyzing" @click="handleViralAnalysis" style="width: 100%"
-            :disabled="!scriptId">
-            病毒传播分析
-          </el-button>
-
-          <!-- 分析结果 -->
-          <div v-if="viralResult" class="viral-result">
-            <el-divider>分析结果</el-divider>
-            <div v-for="(val, key) in viralResult" :key="key" class="result-item">
-              <span>{{ key }}</span>
-              <el-progress :percentage="Math.round(val * 100)" :stroke-width="12" />
-            </div>
-          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -281,7 +267,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Loading } from '@element-plus/icons-vue'
-import { generateScript, updateScript, checkViral } from '../../api/script'
+import { generateScript, updateScript } from '../../api/script'
 import { getReferenceContext } from '../../api/knowledge'
 import MarkdownPreview from './MarkdownPreview.vue'
 
@@ -298,8 +284,6 @@ const emit = defineEmits<{
 
 const saving = ref(false)
 const generating = ref(false)
-const analyzing = ref(false)
-const viralResult = ref<any>(null)
 const scriptId = ref<string>('')
 const activeTab = ref('structured')
 const markdownPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
@@ -459,17 +443,6 @@ async function handleGenerate() {
     emit('scriptLoaded', data)
   } finally {
     generating.value = false
-  }
-}
-
-async function handleViralAnalysis() {
-  if (!scriptId.value) return
-  analyzing.value = true
-  try {
-    const res: any = await checkViral(scriptId.value)
-    viralResult.value = res.viral_elements || res.analysis || res
-  } finally {
-    analyzing.value = false
   }
 }
 </script>
@@ -727,28 +700,6 @@ async function handleViralAnalysis() {
     gap: 4px;
     flex-wrap: wrap;
     margin-top: 2px;
-  }
-}
-
-.viral-result {
-  margin-top: 12px;
-
-  .result-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 8px;
-
-    span {
-      width: 80px;
-      font-size: 13px;
-      color: #606266;
-      flex-shrink: 0;
-    }
-
-    .el-progress {
-      flex: 1;
-    }
   }
 }
 </style>

@@ -29,3 +29,13 @@ export function regenerateImage(shotId: string) {
 export function regenerateVideo(shotId: string) {
   return request.post(`/shots/${shotId}/regenerate-video`)
 }
+
+// 同步生成单个镜头提示词
+export function generateShotPrompt(shotId: string) {
+  return request.post(`/shots/${shotId}/generate-prompt`, {}, { timeout: 60000 } as any)
+}
+
+// 同步生成单个镜头图片
+export function generateShotImage(shotId: string, aspectRatio: string = '9:16') {
+  return request.post(`/shots/${shotId}/generate-image`, { aspect_ratio: aspectRatio }, { timeout: 120000 } as any)
+}

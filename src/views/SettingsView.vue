@@ -22,7 +22,7 @@
             <div class="provider-body">
               <div class="provider-meta">
                 <span v-if="p.models?.length" class="provider-models">
-                  模型: {{ p.models.join(', ') }}
+                  模型: {{ p.models.map((m: any) => m.name || m.model_id).join(', ') }}
                 </span>
                 <span v-if="p.hint" class="provider-hint">
                   Key: {{ p.hint }}
@@ -50,7 +50,7 @@
         </div>
       </el-tab-pane>
 
-      <!-- 社交账号 -->
+      <!-- 社交账号（暂时注释，后续开发时启用）
       <el-tab-pane label="社交账号" name="social">
         <el-card>
           <div class="page-header">
@@ -101,6 +101,7 @@
           </template>
         </el-dialog>
       </el-tab-pane>
+      -->
 
       <!-- 下载配置 -->
       <el-tab-pane label="下载配置" name="download">
@@ -206,10 +207,11 @@ const apiKeyInput = ref('')
 const savingKey = ref(false)
 
 // 社交账号
-const socialAccounts = ref<any[]>([])
-const showAddSocial = ref(false)
-const addingSocial = ref(false)
-const socialForm = reactive({ platform: 'douyin', account_name: '', cookies: '' })
+// 社交账号（暂时注释，后续开发时启用）
+// const socialAccounts = ref<any[]>([])
+// const showAddSocial = ref(false)
+// const addingSocial = ref(false)
+// const socialForm = reactive({ platform: 'douyin', account_name: '', cookies: '' })
 
 // 个人信息
 const profileForm = reactive({ username: '', email: '' })
@@ -227,7 +229,7 @@ const savingCookie = ref(false)
 
 onMounted(async () => {
   loadProviders()
-  loadSocialAccounts()
+  // loadSocialAccounts() // 暂时注释，后续开发时启用
   loadCookieStatus()
   if (authStore.user) {
     profileForm.username = authStore.user.username || ''
@@ -281,14 +283,14 @@ async function saveKey(name: string) {
 
 function providerIcon(name: string) {
   const map: Record<string, string> = {
-    glm: '🔮', doubao: '🎨', wanx: '🎬', seedance: '🎥', nano_banana: '🍌',
+    qwen: '🔮', doubao: '🎨', wanx: '🎬', seedance: '🎥', nano_banana: '🍌',
   }
   return map[name] || '🤖'
 }
 
 function providerLabel(name: string) {
   const map: Record<string, string> = {
-    glm: '智谱 GLM', doubao: '豆包 Seedream', wanx: '通义万相',
+    qwen: '通义千问 Qwen', doubao: '豆包 Seedream', wanx: '通义万相',
     seedance: '豆包 Seedance', nano_banana: 'Nano Banana',
   }
   return map[name] || name
@@ -302,37 +304,37 @@ function serviceLabel(s: string) {
   return map[s] || s
 }
 
-async function loadSocialAccounts() {
-  try {
-    const res: any = await request.get('/publishing/social-accounts')
-    socialAccounts.value = Array.isArray(res) ? res : (res.items || [])
-  } catch { /* ignore */ }
-}
+// async function loadSocialAccounts() {
+//   try {
+//     const res: any = await request.get('/publishing/social-accounts')
+//     socialAccounts.value = Array.isArray(res) ? res : (res.items || [])
+//   } catch { /* ignore */ }
+// }
 
-async function addSocialAccount() {
-  addingSocial.value = true
-  try {
-    await request.post('/publishing/social-accounts', socialForm)
-    ElMessage.success('添加成功')
-    showAddSocial.value = false
-    loadSocialAccounts()
-  } finally {
-    addingSocial.value = false
-  }
-}
+// async function addSocialAccount() {
+//   addingSocial.value = true
+//   try {
+//     await request.post('/publishing/social-accounts', socialForm)
+//     ElMessage.success('添加成功')
+//     showAddSocial.value = false
+//     loadSocialAccounts()
+//   } finally {
+//     addingSocial.value = false
+//   }
+// }
 
-async function validateCookies(id: string) {
-  try {
-    await request.post(`/publishing/social-accounts/${id}/validate-cookies`)
-    ElMessage.success('Cookie 有效')
-  } catch { /* error handled by interceptor */ }
-}
+// async function validateCookies(id: string) {
+//   try {
+//     await request.post(`/publishing/social-accounts/${id}/validate-cookies`)
+//     ElMessage.success('Cookie 有效')
+//   } catch { /* error handled by interceptor */ }
+// }
 
-async function removeSocial(id: string) {
-  await request.delete(`/publishing/social-accounts/${id}`)
-  ElMessage.success('已删除')
-  loadSocialAccounts()
-}
+// async function removeSocial(id: string) {
+//   await request.delete(`/publishing/social-accounts/${id}`)
+//   ElMessage.success('已删除')
+//   loadSocialAccounts()
+// }
 
 async function saveProfile() {
   savingProfile.value = true

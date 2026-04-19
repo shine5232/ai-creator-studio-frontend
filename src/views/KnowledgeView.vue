@@ -232,7 +232,7 @@
     </el-drawer>
 
     <!-- 重新分析进度弹窗 -->
-    <el-dialog v-model="showReanalyzeDialog" title="重新分析" width="450px" :close-on-click-modal="false" :show-close="!reanalyzing">
+    <el-dialog v-model="showReanalyzeDialog" title="重新分析" width="450px" :close-on-click-modal="false" :show-close="!reanalyzing" class="reanalyze-dialog">
       <div class="analysis-progress">
         <el-progress :percentage="reanalyzeProgress" :status="reanalyzeStatus === 'failed' ? 'exception' : undefined"
           :stroke-width="16" striped striped-flow />
@@ -733,6 +733,80 @@ async function handleDelete(c: any) {
     text-decoration: none;
     word-break: break-all;
     &:hover { text-decoration: underline; }
+  }
+}
+</style>
+
+<style lang="scss">
+/* MessageBox 确认弹窗 — 全局覆盖，柔和不刺眼 */
+.el-message-box {
+  background-color: #2a2a3e !important;
+  border: 1px solid #4a4a6a !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 10px !important;
+
+  .el-message-box__header {
+    padding: 16px 20px 10px !important;
+  }
+
+  .el-message-box__title {
+    color: #e0e0e0 !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
+  }
+
+  .el-message-box__content {
+    color: #b0b0c0 !important;
+    padding: 10px 20px !important;
+  }
+
+  .el-message-box__message {
+    color: #b0b0c0 !important;
+  }
+
+  .el-message-box__btns {
+    padding: 10px 20px 16px !important;
+  }
+}
+
+.el-overlay {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* 重新分析进度弹窗 */
+.reanalyze-dialog.el-dialog {
+  background-color: #2a2a3e !important;
+  border: 1px solid #4a4a6a !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 10px !important;
+
+  .el-dialog__header {
+    border-bottom: 1px solid #4a4a6a !important;
+    padding: 16px 20px !important;
+    margin-right: 0 !important;
+  }
+
+  .el-dialog__title {
+    color: #e0e0e0 !important;
+    font-weight: 600 !important;
+  }
+
+  .el-dialog__headerbtn .el-dialog__close {
+    color: #909399 !important;
+  }
+
+  .el-dialog__body {
+    color: #b0b0c0 !important;
+    padding: 24px 20px !important;
+  }
+
+  .el-dialog__footer {
+    border-top: 1px solid #4a4a6a !important;
+    padding: 12px 20px !important;
+  }
+
+  .progress-text {
+    color: #b0b0c0 !important;
   }
 }
 </style>

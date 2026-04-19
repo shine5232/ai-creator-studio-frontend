@@ -39,3 +39,10 @@ export function recommendCases(data: { description?: string; platform?: string; 
 export function getReferenceContext(caseId: number) {
   return request.get(`/kb/cases/${caseId}/reference-context`)
 }
+
+// 获取案例 Markdown 报告
+export function getCaseMarkdown(caseId: string | number) {
+  return request.get(`/kb/cases/${caseId}/markdown`, {
+    responseType: 'text'
+  })
+}

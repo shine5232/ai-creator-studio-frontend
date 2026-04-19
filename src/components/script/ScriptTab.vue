@@ -1,159 +1,170 @@
 <template>
   <div class="script-tab">
     <el-row :gutter="20">
-      <!-- 左侧：脚本结构化展示 -->
+      <!-- 左侧：脚本展示 -->
       <el-col :span="14">
         <el-card>
           <template #header>
             <div style="display: flex; align-items: center; justify-content: space-between">
-              <span>脚本详情</span>
+              <el-tabs v-model="activeTab" class="script-tabs">
+                <el-tab-pane label="结构化详情" name="structured"></el-tab-pane>
+                <el-tab-pane label="Markdown 预览" name="markdown"></el-tab-pane>
+              </el-tabs>
               <el-button size="small" @click="handleSave" :loading="saving">保存</el-button>
             </div>
           </template>
 
-          <!-- 基本信息 -->
-          <div class="section-block">
-            <div class="section-title">基本信息</div>
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="标题">{{ form.title }}</el-descriptions-item>
-              <el-descriptions-item label="主题">{{ form.theme }}</el-descriptions-item>
-              <el-descriptions-item label="叙事类型">{{ form.narrative_type }}</el-descriptions-item>
-              <el-descriptions-item label="时长">{{ durationLabel }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
+          <!-- 结构化详情 Tab -->
+          <div v-show="activeTab === 'structured'">
+            <!-- 基本信息 -->
+            <div class="section-block">
+              <div class="section-title">基本信息</div>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="标题">{{ form.title }}</el-descriptions-item>
+                <el-descriptions-item label="主题">{{ form.theme }}</el-descriptions-item>
+                <el-descriptions-item label="叙事类型">{{ form.narrative_type }}</el-descriptions-item>
+                <el-descriptions-item label="时长">{{ durationLabel }}</el-descriptions-item>
+              </el-descriptions>
+            </div>
 
-          <!-- 脚本正文 -->
-          <div class="section-block">
-            <div class="section-title">脚本正文</div>
-            <el-input v-model="form.content" type="textarea" :rows="8"
-              placeholder="输入脚本内容，或使用右侧 AI 面板生成" />
-          </div>
+            <!-- 脚本正文 -->
+            <div class="section-block">
+              <div class="section-title">脚本正文</div>
+              <el-input v-model="form.content" type="textarea" :rows="8"
+                placeholder="输入脚本内容，或使用右侧 AI 面板生成" />
+            </div>
 
-          <!-- 人物设定 -->
-          <div v-if="characterProfiles.length" class="section-block">
-            <div class="section-title">人物设定</div>
-            <div class="character-cards">
-              <div v-for="(char, ci) in characterProfiles" :key="ci" class="character-card">
-                <div class="char-header">
-                  <span class="char-name">{{ char.role_name }}</span>
-                  <el-tag v-if="char.race_ethnicity" size="small" type="warning">{{ char.race_ethnicity }}</el-tag>
-                </div>
-                <el-descriptions :column="2" border size="small" class="char-desc">
-                  <el-descriptions-item label="年龄">{{ char.age }}</el-descriptions-item>
-                  <el-descriptions-item label="性别">{{ char.gender }}</el-descriptions-item>
-                  <el-descriptions-item label="肤色">{{ char.skin_color }}</el-descriptions-item>
-                  <el-descriptions-item label="眼睛">{{ char.eyes }}</el-descriptions-item>
-                  <el-descriptions-item label="发型">{{ char.hair }}</el-descriptions-item>
-                  <el-descriptions-item label="体型">{{ char.body_type }}</el-descriptions-item>
-                  <el-descriptions-item label="面部特征" :span="2">{{ char.facial_features }}</el-descriptions-item>
-                  <el-descriptions-item label="特殊标记" :span="2">{{ char.special_marks }}</el-descriptions-item>
-                  <el-descriptions-item label="性格" :span="2">{{ char.personality }}</el-descriptions-item>
-                </el-descriptions>
-                <!-- 穿着变化 -->
-                <div v-if="char.clothing_phases?.length" class="clothing-phases">
-                  <div class="clothing-label">穿着变化</div>
-                  <div class="clothing-row">
-                    <div v-for="cp in char.clothing_phases" :key="cp.phase" class="clothing-item">
-                      <el-tag size="small" effect="dark" class="phase-tag">{{ cp.phase }}</el-tag>
-                      <span class="phase-desc">{{ cp.description }}</span>
+            <!-- 人物设定 -->
+            <div v-if="characterProfiles.length" class="section-block">
+              <div class="section-title">人物设定</div>
+              <div class="character-cards">
+                <div v-for="(char, ci) in characterProfiles" :key="ci" class="character-card">
+                  <div class="char-header">
+                    <span class="char-name">{{ char.role_name }}</span>
+                    <el-tag v-if="char.race_ethnicity" size="small" type="warning">{{ char.race_ethnicity }}</el-tag>
+                  </div>
+                  <el-descriptions :column="2" border size="small" class="char-desc">
+                    <el-descriptions-item label="年龄">{{ char.age }}</el-descriptions-item>
+                    <el-descriptions-item label="性别">{{ char.gender }}</el-descriptions-item>
+                    <el-descriptions-item label="肤色">{{ char.skin_color }}</el-descriptions-item>
+                    <el-descriptions-item label="眼睛">{{ char.eyes }}</el-descriptions-item>
+                    <el-descriptions-item label="发型">{{ char.hair }}</el-descriptions-item>
+                    <el-descriptions-item label="体型">{{ char.body_type }}</el-descriptions-item>
+                    <el-descriptions-item label="面部特征" :span="2">{{ char.facial_features }}</el-descriptions-item>
+                    <el-descriptions-item label="特殊标记" :span="2">{{ char.special_marks }}</el-descriptions-item>
+                    <el-descriptions-item label="性格" :span="2">{{ char.personality }}</el-descriptions-item>
+                  </el-descriptions>
+                  <!-- 穿着变化 -->
+                  <div v-if="char.clothing_phases?.length" class="clothing-phases">
+                    <div class="clothing-label">穿着变化</div>
+                    <div class="clothing-row">
+                      <div v-for="cp in char.clothing_phases" :key="cp.phase" class="clothing-item">
+                        <el-tag size="small" effect="dark" class="phase-tag">{{ cp.phase }}</el-tag>
+                        <span class="phase-desc">{{ cp.description }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- 分镜脚本 -->
-          <div v-if="acts.length" class="section-block">
-            <div class="section-title">分镜脚本</div>
-            <el-collapse v-model="expandedActs" class="acts-collapse">
-              <el-collapse-item
-                v-for="act in acts" :key="act.act_number"
-                :name="act.act_number"
-              >
-                <template #title>
-                  <div class="act-title">
-                    <el-tag size="small" type="primary">第{{ act.act_number }}幕</el-tag>
-                    <span class="act-name">{{ act.act_name }}</span>
-                    <span class="act-time">{{ act.time_range }}</span>
-                  </div>
-                </template>
-
-                <div class="shots-list">
-                  <div v-for="shot in act.shots" :key="shot.shot_number" class="shot-card">
-                    <div class="shot-header">
-                      <span class="shot-number">镜头 {{ shot.shot_number }}</span>
-                      <el-tag size="small" effect="plain">{{ shot.shot_type }}</el-tag>
-                      <el-tag size="small" type="info" effect="plain">{{ shot.time_range }}</el-tag>
-                      <span class="shot-location">{{ shot.location }}</span>
+            <!-- 分镜脚本 -->
+            <div v-if="acts.length" class="section-block">
+              <div class="section-title">分镜脚本</div>
+              <el-collapse v-model="expandedActs" class="acts-collapse">
+                <el-collapse-item
+                  v-for="act in acts" :key="act.act_number"
+                  :name="act.act_number"
+                >
+                  <template #title>
+                    <div class="act-title">
+                      <el-tag size="small" type="primary">第{{ act.act_number }}幕</el-tag>
+                      <span class="act-name">{{ act.act_name }}</span>
+                      <span class="act-time">{{ act.time_range }}</span>
                     </div>
-                    <el-descriptions :column="1" border size="small" class="shot-desc">
-                      <el-descriptions-item label="人物">
-                        <span class="shot-field">{{ shot.characters }}</span>
-                      </el-descriptions-item>
-                      <el-descriptions-item label="环境">
-                        <span class="shot-field">{{ shot.environment }}</span>
-                      </el-descriptions-item>
-                      <el-descriptions-item label="事件">
-                        <span class="shot-field">{{ shot.event }}</span>
-                      </el-descriptions-item>
-                      <el-descriptions-item v-if="shot.dialog" label="台词">
-                        <span class="shot-dialog">{{ shot.dialog }}</span>
-                      </el-descriptions-item>
-                      <el-descriptions-item label="">
-                        <div class="shot-tags-row">
-                          <el-tag v-if="shot.tone" size="small" type="warning" effect="plain">{{ shot.tone }}</el-tag>
-                          <el-tag v-if="shot.mood" size="small" type="danger" effect="plain">{{ shot.mood }}</el-tag>
-                        </div>
-                      </el-descriptions-item>
-                    </el-descriptions>
+                  </template>
+
+                  <div class="shots-list">
+                    <div v-for="shot in act.shots" :key="shot.shot_number" class="shot-card">
+                      <div class="shot-header">
+                        <span class="shot-number">镜头 {{ shot.shot_number }}</span>
+                        <el-tag size="small" effect="plain">{{ shot.shot_type }}</el-tag>
+                        <el-tag size="small" type="info" effect="plain">{{ shot.time_range }}</el-tag>
+                        <span class="shot-location">{{ shot.location }}</span>
+                      </div>
+                      <el-descriptions :column="1" border size="small" class="shot-desc">
+                        <el-descriptions-item label="人物">
+                          <span class="shot-field">{{ shot.characters }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="环境">
+                          <span class="shot-field">{{ shot.environment }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="事件">
+                          <span class="shot-field">{{ shot.event }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item v-if="shot.dialog" label="台词">
+                          <span class="shot-dialog">{{ shot.dialog }}</span>
+                        </el-descriptions-item>
+                        <el-descriptions-item label="">
+                          <div class="shot-tags-row">
+                            <el-tag v-if="shot.tone" size="small" type="warning" effect="plain">{{ shot.tone }}</el-tag>
+                            <el-tag v-if="shot.mood" size="small" type="danger" effect="plain">{{ shot.mood }}</el-tag>
+                          </div>
+                        </el-descriptions-item>
+                      </el-descriptions>
+                    </div>
                   </div>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
+
+            <!-- 视觉设计 -->
+            <div v-if="visualDesign && hasVisualDesign" class="section-block">
+              <div class="section-title">视觉设计</div>
+              <div v-if="visualDesign.color_progression" class="vd-row">
+                <label>色调变化</label>
+                <span>{{ visualDesign.color_progression }}</span>
+              </div>
+              <div v-if="visualDesign.contrasts?.length" class="vd-section">
+                <label>场景对比</label>
+                <el-table :data="visualDesign.contrasts" size="small" border stripe>
+                  <el-table-column prop="before" label="前期" />
+                  <el-table-column prop="after" label="后期" />
+                  <el-table-column prop="symbol" label="象征意义" width="120" />
+                </el-table>
+              </div>
+              <div v-if="visualDesign.visual_symbols?.length" class="vd-section">
+                <label>视觉符号</label>
+                <el-table :data="visualDesign.visual_symbols" size="small" border stripe>
+                  <el-table-column prop="symbol" label="符号" width="150" />
+                  <el-table-column prop="meaning" label="象征意义" />
+                </el-table>
+              </div>
+            </div>
+
+            <!-- 标题建议 -->
+            <div v-if="titleSuggestions.length" class="section-block">
+              <div class="section-title">标题建议</div>
+              <div class="title-suggestions">
+                <div v-for="(ts, i) in titleSuggestions" :key="i" class="title-item">
+                  <el-tag v-if="ts.recommended" size="small" type="success" effect="dark">推荐</el-tag>
+                  <span class="title-text">{{ ts.title }}</span>
                 </div>
-              </el-collapse-item>
-            </el-collapse>
-          </div>
+              </div>
+            </div>
 
-          <!-- 视觉设计 -->
-          <div v-if="visualDesign && hasVisualDesign" class="section-block">
-            <div class="section-title">视觉设计</div>
-            <div v-if="visualDesign.color_progression" class="vd-row">
-              <label>色调变化</label>
-              <span>{{ visualDesign.color_progression }}</span>
-            </div>
-            <div v-if="visualDesign.contrasts?.length" class="vd-section">
-              <label>场景对比</label>
-              <el-table :data="visualDesign.contrasts" size="small" border stripe>
-                <el-table-column prop="before" label="前期" />
-                <el-table-column prop="after" label="后期" />
-                <el-table-column prop="symbol" label="象征意义" width="120" />
-              </el-table>
-            </div>
-            <div v-if="visualDesign.visual_symbols?.length" class="vd-section">
-              <label>视觉符号</label>
-              <el-table :data="visualDesign.visual_symbols" size="small" border stripe>
-                <el-table-column prop="symbol" label="符号" width="150" />
-                <el-table-column prop="meaning" label="象征意义" />
-              </el-table>
-            </div>
-          </div>
-
-          <!-- 标题建议 -->
-          <div v-if="titleSuggestions.length" class="section-block">
-            <div class="section-title">标题建议</div>
-            <div class="title-suggestions">
-              <div v-for="(ts, i) in titleSuggestions" :key="i" class="title-item">
-                <el-tag v-if="ts.recommended" size="small" type="success" effect="dark">推荐</el-tag>
-                <span class="title-text">{{ ts.title }}</span>
+            <!-- 爆款元素 -->
+            <div v-if="viralElements.length" class="section-block">
+              <div class="section-title">爆款元素</div>
+              <div class="viral-tags">
+                <el-tag v-for="v in viralElements" :key="v" type="danger" effect="plain">{{ v }}</el-tag>
               </div>
             </div>
           </div>
 
-          <!-- 爆款元素 -->
-          <div v-if="viralElements.length" class="section-block">
-            <div class="section-title">爆款元素</div>
-            <div class="viral-tags">
-              <el-tag v-for="v in viralElements" :key="v" type="danger" effect="plain">{{ v }}</el-tag>
-            </div>
+          <!-- Markdown 预览 Tab -->
+          <div v-show="activeTab === 'markdown'">
+            <MarkdownPreview :script-id="scriptId" ref="markdownPreviewRef" />
           </div>
         </el-card>
       </el-col>
@@ -269,8 +280,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown, Loading } from '@element-plus/icons-vue'
 import { generateScript, updateScript, checkViral } from '../../api/script'
 import { getReferenceContext } from '../../api/knowledge'
+import MarkdownPreview from './MarkdownPreview.vue'
 
 const props = defineProps<{
   projectId: string
@@ -288,6 +301,8 @@ const generating = ref(false)
 const analyzing = ref(false)
 const viralResult = ref<any>(null)
 const scriptId = ref<string>('')
+const activeTab = ref('structured')
+const markdownPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
 
 // 结构化数据
 const characterProfiles = ref<any[]>([])
@@ -380,6 +395,13 @@ watch(() => props.referenceCaseId, (id) => {
     refContext.value = null
   }
 }, { immediate: true })
+
+// 切换到 Markdown tab 时刷新内容
+watch(activeTab, (tab) => {
+  if (tab === 'markdown' && scriptId.value) {
+    markdownPreviewRef.value?.loadMarkdown()
+  }
+})
 
 async function loadReferenceContext(caseId: number) {
   refCaseLoading.value = true

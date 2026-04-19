@@ -36,3 +36,10 @@ export function deleteScript(scriptId: string) {
 export function checkViral(scriptId: string) {
   return request.post(`/scripts/${scriptId}/check-viral`)
 }
+
+// 获取脚本 Markdown 内容
+export function getScriptMarkdown(scriptId: string) {
+  return request.get(`/scripts/${scriptId}/markdown`, {
+    responseType: 'text'
+  })
+}

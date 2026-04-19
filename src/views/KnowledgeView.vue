@@ -137,6 +137,13 @@
     <!-- 详情抽屉 -->
     <el-drawer v-model="showDetail" :title="detailCase?.title || '案例详情'" size="520px">
       <template v-if="detailCase">
+        <el-tabs v-model="detailActiveTab" class="detail-tabs">
+          <el-tab-pane label="基本信息" name="basic"></el-tab-pane>
+          <el-tab-pane label="分析报告" name="report" :disabled="detailCase.analysis_status !== 'completed'"></el-tab-pane>
+        </el-tabs>
+
+        <!-- 基本信息 Tab -->
+        <div v-show="detailActiveTab === 'basic'">
         <div class="detail-cover">
           <el-image v-if="detailCase.thumbnail_url" :src="thumbSrc(detailCase.thumbnail_url)" fit="cover" />
         </div>
@@ -224,15 +231,22 @@
           <h4>收录时间</h4>
           <p class="detail-text">{{ detailCase.created_at }}</p>
         </div>
+        </div>
+
+        <!-- 分析报告 Tab -->
+        <div v-show="detailActiveTab === 'report' && detailCase.analysis_status === 'completed'">
+          <MarkdownPreview :case-id="detailCase.id" ref="markdownPreviewRef" />
+        </div>
       </template>
     </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getKnowledgeCases, getKnowledgeCase, analyzeVideo, getAnalysisStatus, deleteKnowledgeCase } from '../api/knowledge'
+import MarkdownPreview from '../components/script/MarkdownPreview.vue'
 
 const cases = ref<any[]>([])
 const total = ref(0)
@@ -244,12 +258,14 @@ const filterStyle = ref('')
 const sortBy = ref('like_rate_desc')
 const showAddDialog = ref(false)
 const showDetail = ref(false)
+const detailActiveTab = ref('basic')
 const detailCase = ref<any>(null)
 const analyzing = ref(false)
 const analysisProgress = ref(0)
 const analysisStatus = ref('')
 const analysisMessage = ref('')
 const analysisResult = ref<any>(null)
+const markdownPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -435,6 +451,13 @@ function parseArray(val: any): string[] {
 
 onUnmounted(() => stopPolling())
 
+// 切换到分析报告 tab 时刷新内容
+watch(detailActiveTab, (tab) => {
+  if (tab === 'report' && detailCase.value?.id) {
+    markdownPreviewRef.value?.loadMarkdown()
+  }
+})
+
 function handleQuote(c: any) {
   navigator.clipboard.writeText(String(c.id))
   ElMessage.success('案例ID已复制，可在创建项目时引用')
@@ -569,6 +592,14 @@ async function handleDelete(c: any) {
     font-size: 13px;
     color: var(--cyber-text-dim);
     margin-top: 8px;
+  }
+}
+
+.detail-tabs {
+  margin-bottom: 16px;
+
+  :deep(.el-tabs__header) {
+    margin-bottom: 12px;
   }
 }
 

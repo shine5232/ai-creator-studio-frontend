@@ -7,15 +7,17 @@
           {{ shots.length }} 个镜头，总时长 {{ totalDuration }}s
         </span>
       </div>
-      <el-button type="success" :loading="batchCharLoading" @click="handleBatchCharImages" :disabled="!characters.length">
-        批量生成人物图片
-      </el-button>
-      <el-button type="primary" :loading="batchPromptLoading" @click="handleBatchShotPrompts" :disabled="!shots.length" plain>
-        批量生成分镜提示词
-      </el-button>
-      <el-button type="warning" :loading="batchShotLoading" @click="handleBatchShotImages" :disabled="!shots.length">
-        批量生成分镜图片
-      </el-button>
+      <div class="batch-actions">
+        <el-button type="success" :loading="batchCharLoading" @click="handleBatchCharImages" :disabled="!characters.length">
+          批量生成人物图片
+        </el-button>
+        <el-button type="primary" :loading="batchPromptLoading" @click="handleBatchShotPrompts" :disabled="!shots.length" plain>
+          批量生成分镜提示词
+        </el-button>
+        <el-button type="warning" :loading="batchShotLoading" @click="handleBatchShotImages" :disabled="!shots.length">
+          批量生成分镜图片
+        </el-button>
+      </div>
     </div>
 
     <!-- 人物参照区域 -->
@@ -700,6 +702,12 @@ function shotStatusLabel(shot: any) {
 </script>
 
 <style scoped lang="scss">
+.batch-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .section-title {
   font-size: 16px;
   font-weight: 600;

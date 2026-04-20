@@ -139,10 +139,6 @@
         <div v-show="detailActiveTab === 'basic'">
         <div class="detail-cover">
           <el-image v-if="detailCase.thumbnail_url" :src="thumbSrc(detailCase.thumbnail_url)" fit="cover" />
-          <el-button v-if="detailCase.video_url" class="detail-play-btn" type="primary" circle size="large"
-            @click.stop="playVideo(detailCase)">
-            <el-icon :size="28"><VideoPlay /></el-icon>
-          </el-button>
         </div>
 
         <!-- 基本信息 -->
@@ -699,11 +695,9 @@ async function handleDelete(c: any) {
   margin-bottom: 20px;
   position: relative;
 
-  .detail-play-btn {
-    position: absolute;
-    bottom: 12px;
-    right: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  :deep(.el-image) {
+    width: 100%;
+    height: 100%;
   }
 }
 

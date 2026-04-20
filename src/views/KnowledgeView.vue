@@ -60,8 +60,10 @@
         </div>
 
         <div class="case-actions">
-          <el-button text type="primary" size="small" @click.stop="openDetail(c)">查看详情</el-button>
-          <el-button text size="small" @click.stop="handleQuote(c)">引用</el-button>
+          <el-button v-if="c.video_url" text type="primary" size="small" @click.stop="playVideo(c)">
+            <el-icon><VideoPlay /></el-icon> 播放
+          </el-button>
+          <el-button text type="primary" size="small" @click.stop="openDetail(c)">详情</el-button>
           <el-button text type="warning" size="small" @click.stop="handleReanalyze(c)">重新分析</el-button>
           <el-button text type="danger" size="small" @click.stop="handleDelete(c)">删除</el-button>
         </div>
@@ -137,6 +139,10 @@
         <div v-show="detailActiveTab === 'basic'">
         <div class="detail-cover">
           <el-image v-if="detailCase.thumbnail_url" :src="thumbSrc(detailCase.thumbnail_url)" fit="cover" />
+          <el-button v-if="detailCase.video_url" class="detail-play-btn" type="primary" circle size="large"
+            @click.stop="playVideo(detailCase)">
+            <el-icon :size="28"><VideoPlay /></el-icon>
+          </el-button>
         </div>
 
         <!-- 基本信息 -->
@@ -242,6 +248,13 @@
         <el-button type="primary" @click="showReanalyzeDialog = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 视频播放弹窗 -->
+    <el-dialog v-model="showVideoDialog" title="视频预览" width="640px" @closed="videoSrc = ''">
+      <div style="text-align: center">
+        <video v-if="videoSrc" :src="videoSrc" controls autoplay style="max-width: 100%; max-height: 500px" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -280,6 +293,10 @@ const reanalyzeCaseId = ref<number | null>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+// 视频播放
+const showVideoDialog = ref(false)
+const videoSrc = ref('')
+
 const addForm = reactive({
   url: '',
   platform: 'douyin',
@@ -315,6 +332,11 @@ async function openDetail(c: any) {
     detailCase.value = c
   }
   showDetail.value = true
+}
+
+function playVideo(c: any) {
+  videoSrc.value = thumbSrc(c.video_url)
+  showVideoDialog.value = true
 }
 
 function parseStyle(style: string | string[]) {
@@ -468,11 +490,6 @@ watch(detailActiveTab, (tab) => {
     markdownPreviewRef.value?.loadMarkdown()
   }
 })
-
-function handleQuote(c: any) {
-  navigator.clipboard.writeText(String(c.id))
-  ElMessage.success('案例ID已复制，可在创建项目时引用')
-}
 
 let reanalyzePollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -680,6 +697,14 @@ async function handleDelete(c: any) {
   overflow: hidden;
   background: var(--cyber-bg-input);
   margin-bottom: 20px;
+  position: relative;
+
+  .detail-play-btn {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
 }
 
 .analysis-progress {

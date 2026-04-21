@@ -246,6 +246,15 @@
                 <el-option label="悬疑" value="suspense" />
               </el-select>
             </el-form-item>
+            <el-form-item label="视频风格">
+              <el-select v-model="aiForm.video_style" style="width: 100%">
+                <el-option label="电影" value="cinematic" />
+                <el-option label="动漫" value="anime" />
+                <el-option label="动画" value="animation" />
+                <el-option label="赛博" value="cyberpunk" />
+                <el-option label="油画" value="oil_painting" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="目标时长（秒）">
               <el-input-number v-model="aiForm.duration_seconds" :min="10" :max="300" style="width: 100%" />
             </el-form-item>
@@ -357,6 +366,7 @@ const aiForm = reactive({
   title: '',
   theme: '',
   narrative_type: 'emotional',
+  video_style: 'cinematic',
   duration_seconds: 60,
   custom_prompt: '',
 })

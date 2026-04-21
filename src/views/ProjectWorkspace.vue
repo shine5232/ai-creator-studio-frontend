@@ -80,8 +80,14 @@ async function loadStoryboard() {
 }
 
 async function onScriptLoaded(s: any) {
-  script.value = s
-  await loadStoryboard()
+  if (s) {
+    // ScriptTab watch 传来的正常加载，直接用
+    script.value = s
+    await loadStoryboard()
+  } else {
+    // 一键生成完成后传 null，需要重新从 API 拉取
+    await loadScript()
+  }
 }
 
 function onScriptSaved(s: any) {

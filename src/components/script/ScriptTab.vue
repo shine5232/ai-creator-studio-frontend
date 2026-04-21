@@ -266,18 +266,68 @@
           <el-button type="primary" :loading="generating" @click="handleGenerate" style="width: 100%">
             AI 生成脚本
           </el-button>
+
+          <el-divider style="margin: 16px 0 12px" />
+
+          <el-button
+            type="primary"
+            :loading="autoGenerating"
+            @click="handleAutoGenerate"
+            style="width: 100%"
+            class="auto-generate-btn"
+          >
+            <el-icon><Promotion /></el-icon>
+            {{ autoGenerating ? '生成中...' : '一键生成爆款' }}
+          </el-button>
+          <p style="font-size: 12px; color: #909399; margin-top: 6px; text-align: center">
+            从空白项目开始，自动完成 脚本→图片→视频→合成 全流程
+          </p>
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 一键生成全流程进度弹窗 -->
+    <el-dialog v-model="showAutoDialog" title="一键生成爆款 - 全流程进度" width="620px"
+      :close-on-click-modal="false" :show-close="autoStepStatus === 'completed' || autoStepStatus === 'failed'"
+      @closed="onAutoDialogClosed">
+      <el-steps :active="autoActiveStep" direction="vertical" :process-status="autoProcessStatus"
+        :finish-status="'success'" class="auto-steps">
+        <el-step v-for="(step, idx) in autoSteps" :key="idx"
+          :title="step.title"
+          :status="getAutoStepStatus(idx)">
+          <template #description>
+            <span v-if="getAutoStepStatus(idx) === 'process'" class="step-loading">
+              <el-icon class="is-loading"><Loading /></el-icon> 执行中...
+            </span>
+            <span v-else-if="getAutoStepStatus(idx) === 'finish'">已完成</span>
+            <span v-else-if="getAutoStepStatus(idx) === 'error'" class="step-error">
+              {{ autoStepErrors[idx] || '失败' }}
+            </span>
+            <span v-else>待执行</span>
+          </template>
+        </el-step>
+      </el-steps>
+      <div style="margin-top: 20px">
+        <el-progress :percentage="autoProgress"
+          :status="autoStepStatus === 'failed' ? 'exception' : autoStepStatus === 'completed' ? 'success' : undefined"
+          :stroke-width="18" :text-inside="true" />
+        <p style="color: #606266; font-size: 13px; margin-top: 8px; text-align: center">{{ autoCurrentMessage }}</p>
+      </div>
+      <template #footer>
+        <el-button v-if="autoStepStatus === 'completed' || autoStepStatus === 'failed'"
+          @click="showAutoDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { ArrowDown, Loading } from '@element-plus/icons-vue'
+import { ref, reactive, computed, watch, onUnmounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown, Loading, Promotion } from '@element-plus/icons-vue'
 import { generateScript, updateScript } from '../../api/script'
 import { getReferenceContext } from '../../api/knowledge'
+import { autoGenerate, getTask } from '../../api/generation'
 import MarkdownPreview from './MarkdownPreview.vue'
 
 const props = defineProps<{
@@ -453,6 +503,153 @@ async function handleGenerate() {
     emit('scriptLoaded', data)
   } finally {
     generating.value = false
+  }
+}
+
+// ─── 一键爆款 ───
+
+const autoGenerating = ref(false)
+const showAutoDialog = ref(false)
+const autoProgress = ref(0)
+const autoCurrentMessage = ref('')
+const autoStepStatus = ref<'running' | 'completed' | 'failed'>('running')
+const autoActiveStep = ref(0)
+const autoStepErrors = ref<Record<number, string>>({})
+let autoProgressTimer: ReturnType<typeof setInterval> | null = null
+
+const autoSteps = [
+  { title: 'AI 生成脚本' },
+  { title: '生成人物参照提示词' },
+  { title: '生成分镜提示词' },
+  { title: '生成人物参照图片' },
+  { title: '生成分镜图片' },
+  { title: '生成分镜短视频' },
+  { title: '合成短片' },
+]
+
+function getAutoStepStatus(idx: number): '' | 'wait' | 'process' | 'finish' | 'error' {
+  const currentStepNum = autoActiveStep.value
+  const status = autoStepStatus.value
+  const error = autoStepErrors.value[idx]
+  if (error) return 'error'
+  if (status === 'failed' && idx === currentStepNum) return 'error'
+  if (idx < currentStepNum) return 'finish'
+  if (idx === currentStepNum) {
+    if (status === 'failed') return 'error'
+    if (status === 'completed') return 'finish'
+    return 'process'
+  }
+  return 'wait'
+}
+
+const autoProcessStatus = computed(() => {
+  if (autoStepStatus.value === 'failed') return 'error'
+  if (autoStepStatus.value === 'completed') return 'finish'
+  return 'process'
+})
+
+function parseAutoStepFromMessage(msg: string): number {
+  const match = msg.match(/步骤\s*(\d+)\/7/)
+  if (match) return parseInt(match[1]) - 1
+  const p = autoProgress.value
+  if (p <= 10) return 0
+  if (p <= 15) return 1
+  if (p <= 20) return 2
+  if (p <= 35) return 3
+  if (p <= 60) return 4
+  if (p <= 90) return 5
+  return 6
+}
+
+function startAutoProgressPolling(taskId: string) {
+  showAutoDialog.value = true
+  autoProgress.value = 0
+  autoCurrentMessage.value = '任务已提交，等待开始...'
+  autoStepStatus.value = 'running'
+  autoActiveStep.value = 0
+  autoStepErrors.value = {}
+
+  if (autoProgressTimer) clearInterval(autoProgressTimer)
+  autoProgressTimer = setInterval(async () => {
+    try {
+      const data: any = await getTask(taskId)
+      const progress = data.progress ?? 0
+      autoProgress.value = progress
+      autoCurrentMessage.value = data.message || `正在处理... ${progress}%`
+
+      const stepNum = parseAutoStepFromMessage(data.message || '')
+      if (stepNum >= 0 && stepNum < 7) {
+        autoActiveStep.value = stepNum
+      }
+
+      if (data.status === 'completed') {
+        autoStepStatus.value = 'completed'
+        autoActiveStep.value = 7
+        autoProgress.value = 100
+        autoCurrentMessage.value = '一键生成完成！所有步骤已成功执行'
+        stopAutoProgressPolling()
+      } else if (data.status === 'failed') {
+        autoStepStatus.value = 'failed'
+        autoCurrentMessage.value = data.error_message || '生成失败'
+        const failedStep = parseAutoStepFromMessage(data.message || '')
+        autoStepErrors.value[failedStep] = data.error_message || '失败'
+        stopAutoProgressPolling()
+      }
+    } catch {
+      // 忽略轮询错误
+    }
+  }, 2000)
+}
+
+function stopAutoProgressPolling() {
+  if (autoProgressTimer) {
+    clearInterval(autoProgressTimer)
+    autoProgressTimer = null
+  }
+}
+
+function onAutoDialogClosed() {
+  // 关闭进度弹窗后，通知父组件重新加载脚本和分镜数据
+  emit('scriptLoaded', null)
+}
+
+onUnmounted(() => {
+  stopAutoProgressPolling()
+})
+
+async function handleAutoGenerate() {
+  if (!aiForm.title.trim()) {
+    ElMessage.warning('请输入脚本标题')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      '一键生成将从空白开始，自动完成脚本生成、图片生成、视频生成和合成的全流程。该过程可能需要较长时间，确认继续？',
+      '确认一键生成',
+      { confirmButtonText: '开始生成', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  autoGenerating.value = true
+  try {
+    const params: any = { ...aiForm }
+    if (props.referenceCaseId) {
+      params.source_case_id = props.referenceCaseId
+    }
+
+    const data: any = await autoGenerate(props.projectId, params)
+    if (!data.task_id) {
+      ElMessage.error(data.message || '任务创建失败')
+      return
+    }
+    startAutoProgressPolling(data.task_id)
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '一键生成失败')
+  } finally {
+    autoGenerating.value = false
   }
 }
 </script>
@@ -710,6 +907,46 @@ async function handleGenerate() {
     gap: 4px;
     flex-wrap: wrap;
     margin-top: 2px;
+  }
+}
+
+// ─── 一键爆款 ───
+
+.auto-generate-btn {
+  background: linear-gradient(135deg, #e6a23c, #f56c6c) !important;
+  border: none !important;
+  font-size: 15px !important;
+  font-weight: 600;
+  letter-spacing: 1px;
+
+  &:hover {
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(230, 162, 60, 0.4);
+  }
+}
+
+.auto-steps {
+  :deep(.el-step__head) {
+    padding-right: 12px;
+  }
+
+  :deep(.el-step__title) {
+    font-size: 14px;
+  }
+
+  .step-loading {
+    color: var(--el-color-primary);
+    font-size: 12px;
+
+    .el-icon {
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+  }
+
+  .step-error {
+    color: var(--el-color-danger);
+    font-size: 12px;
   }
 }
 </style>

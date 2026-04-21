@@ -54,3 +54,10 @@ export function getTask(taskId: string) {
 export function retryTask(taskId: string) {
   return request.post(`/generation/tasks/${taskId}/retry`)
 }
+
+// 一键生成爆款
+export function autoGenerate(projectId: string, data: any) {
+  return request.post(`/projects/${projectId}/auto-generate`, data, {
+    timeout: 300000
+  })
+}

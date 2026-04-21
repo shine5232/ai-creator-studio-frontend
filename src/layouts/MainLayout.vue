@@ -10,7 +10,7 @@
         router
       >
         <el-menu-item index="/projects">项目列表</el-menu-item>
-        <el-menu-item index="/knowledge">知识库</el-menu-item>
+        <el-menu-item index="/knowledge">素材库</el-menu-item>
         <el-menu-item index="/analytics">数据分析</el-menu-item>
       </el-menu>
       <div class="user-area">

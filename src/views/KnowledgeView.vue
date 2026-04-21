@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2>知识库 ({{ total }})</h2>
+      <h2>素材库 ({{ total }})</h2>
       <div>
         <el-input v-model="search" placeholder="搜索案例" style="width: 200px; margin-right: 12px" clearable
           prefix-icon="Search" />

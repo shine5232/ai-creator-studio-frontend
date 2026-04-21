@@ -1,6 +1,6 @@
 import request from './request'
 
-// 知识库列表
+// 素材库列表
 export function getKnowledgeCases(params?: any) {
   return request.get('/kb/cases', { params })
 }

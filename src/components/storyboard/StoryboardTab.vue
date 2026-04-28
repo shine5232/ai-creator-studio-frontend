@@ -173,6 +173,9 @@
           <span class="shot-time">{{ shot.time_range || `${shot.video_duration || 3}s` }}</span>
         </div>
         <div class="shot-desc">{{ shot.description || '无描述' }}</div>
+        <div v-if="shot.characters" class="shot-chars">
+          <el-tag v-for="name in shot.characters.split(',')" :key="name" size="small" type="warning" style="margin-right: 4px">{{ name.trim() }}</el-tag>
+        </div>
         <div class="shot-status">
           <el-tag size="small" :type="shotStatusType(shot)">
             {{ shotStatusLabel(shot) }}
@@ -198,6 +201,9 @@
         <el-form label-position="top">
           <el-form-item label="画面描述">
             <el-input v-model="editForm.description" type="textarea" :rows="3" />
+          </el-form-item>
+          <el-form-item label="出场人物">
+            <el-input v-model="editForm.characters" placeholder="人物名称，逗号分隔" />
           </el-form-item>
           <el-form-item label="镜头类型">
             <el-select v-model="editForm.shot_type">
@@ -322,6 +328,7 @@ const selectedShotIds = ref<Set<number>>(new Set())
 
 const editForm = reactive({
   description: '',
+  characters: '',
   shot_type: '',
   video_duration: 3,
   image_prompt: '',
@@ -382,6 +389,7 @@ function openCharDetail(char: any) {
 watch(selectedShot, (s) => {
   if (s) {
     editForm.description = s.description || ''
+    editForm.characters = s.characters || ''
     editForm.shot_type = s.shot_type || ''
     editForm.video_duration = s.video_duration || 3
     editForm.image_prompt = s.image_prompt || ''
@@ -454,8 +462,28 @@ async function handleGenShotImage(shot: any) {
   const key = `shot-${shot.id}`
   imageLoading.value = key
   try {
-    await generateShotImage(shot.id)
-    ElMessage.success('图片生成成功')
+    const res = await generateShotImage(shot.id)
+    const taskId = res?.task_id
+    if (taskId) {
+      // Poll task status until completed
+      for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 3000))
+        const task = await getTask(taskId)
+        if (task.status === 'completed' || task.status === 'success') {
+          ElMessage.success('图片生成成功')
+          emit('refresh')
+          return
+        }
+        if (task.status === 'failed') {
+          ElMessage.error('图片生成失败: ' + (task.error_message || '未知错误'))
+          emit('refresh')
+          return
+        }
+      }
+      ElMessage.warning('图片生成超时，请稍后刷新查看')
+    } else {
+      ElMessage.success('图片生成任务已提交')
+    }
     emit('refresh')
   } catch {
     ElMessage.error('图片生成失败')
@@ -922,6 +950,10 @@ function shotStatusLabel(shot: any) {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    margin-bottom: 4px;
+  }
+
+  .shot-chars {
     margin-bottom: 8px;
   }
 

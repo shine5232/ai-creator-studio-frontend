@@ -3,105 +3,152 @@
     <el-tabs v-model="activeTab">
       <!-- AI 服务配置 -->
       <el-tab-pane label="AI 服务配置" name="ai">
-        <div class="provider-list">
-          <el-card v-for="p in providers" :key="p.name" class="provider-card">
-            <div class="provider-header">
-              <div class="provider-info">
-                <span class="provider-icon">{{ providerIcon(p.name) }}</span>
-                <span class="provider-name">{{ providerLabel(p.name) }}</span>
-                <el-tag size="small" :type="p.configured ? 'success' : 'info'">
-                  {{ p.configured ? '已配置' : '未配置' }}
+        <!-- Filter bar -->
+        <div class="ai-filter-bar">
+          <el-radio-group v-model="serviceTypeFilter" size="small" @change="loadConfigs">
+            <el-radio-button value="">全部</el-radio-button>
+            <el-radio-button value="text_generation">文本生成</el-radio-button>
+            <el-radio-button value="text_to_image">文生图</el-radio-button>
+            <el-radio-button value="image_to_image">图生图</el-radio-button>
+            <el-radio-button value="image_to_video">图生视频</el-radio-button>
+          </el-radio-group>
+          <div class="ai-filter-actions">
+            <el-button type="primary" size="small" @click="openAddDialog">+ 添加模型配置</el-button>
+            <el-button size="small" @click="showSystemDefaults = true">系统默认</el-button>
+          </div>
+        </div>
+
+        <!-- Config card list -->
+        <div class="config-list">
+          <el-empty v-if="!configs.length" description="暂无自定义模型配置，点击上方按钮添加" />
+          <el-card v-for="c in configs" :key="c.id" class="config-card">
+            <div class="config-header">
+              <div class="config-info">
+                <span class="config-star">{{ c.is_default ? '\u2B50' : '' }}</span>
+                <span class="config-name">{{ c.config_name }}</span>
+                <el-tag size="small" :type="serviceTagType(c.service_type)">{{ serviceLabel(c.service_type) }}</el-tag>
+                <el-tag size="small" :type="c.is_enabled ? 'success' : 'info'">
+                  {{ c.is_enabled ? '已启用' : '已禁用' }}
                 </el-tag>
               </div>
-              <div class="provider-services">
+            </div>
+            <div class="config-body">
+              <div class="config-meta">
+                <span class="meta-line">
+                  <span class="meta-label">厂商:</span> {{ providerLabel(c.provider) }}
+                </span>
+                <span class="meta-line">
+                  <span class="meta-label">模型:</span> {{ c.model_id }}
+                </span>
+                <span v-if="c.api_key_hint" class="meta-line meta-hint">
+                  <span class="meta-label">Key:</span> {{ c.api_key_hint }}
+                </span>
+                <span v-if="c.api_base_url" class="meta-line meta-hint">
+                  <span class="meta-label">Base:</span> {{ c.api_base_url }}
+                </span>
+              </div>
+              <div class="config-actions">
+                <el-button text type="primary" size="small" @click="openEditDialog(c)">编辑</el-button>
+                <el-button text type="danger" size="small" @click="handleDelete(c)">删除</el-button>
+              </div>
+            </div>
+          </el-card>
+        </div>
+
+        <!-- Add/Edit dialog -->
+        <el-dialog
+          v-model="showConfigDialog"
+          :title="isEditing ? '编辑模型配置' : '添加模型配置'"
+          width="560px"
+          destroy-on-close
+        >
+          <el-form :model="configForm" label-width="110px" :rules="formRules" ref="formRef">
+            <el-form-item label="配置名称" prop="config_name">
+              <el-input v-model="configForm.config_name" placeholder="如：我的GPT-4o" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="服务类型" prop="service_type">
+              <el-select v-model="configForm.service_type" style="width: 100%" placeholder="选择服务类型">
+                <el-option label="文本生成" value="text_generation" />
+                <el-option label="文生图" value="text_to_image" />
+                <el-option label="图生图" value="image_to_image" />
+                <el-option label="图生视频" value="image_to_video" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="API 厂商" prop="provider">
+              <el-select v-model="configForm.provider" style="width: 100%" placeholder="选择厂商" @change="onProviderChange">
+                <el-option label="通义千问 (Qwen)" value="qwen" />
+                <el-option label="豆包 Seedream" value="doubao" />
+                <el-option label="通义万相" value="wanx" />
+                <el-option label="豆包 Seedance" value="seedance" />
+                <el-option label="Nano Banana" value="nano_banana" />
+                <el-option label="Grok (APIMart)" value="grok" />
+                <el-option label="通用 (Generic)" value="generic" />
+                <el-option label="自定义..." value="custom" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="configForm.provider === 'custom'" label="自定义厂商名">
+              <el-input v-model="configForm.custom_provider" placeholder="自定义厂商标识" />
+            </el-form-item>
+            <el-form-item label="模型标识" prop="model_id">
+              <el-input v-model="configForm.model_id" placeholder="如 qwen3.5-plus, doubao-seedream" />
+              <div v-if="modelHints.length" class="model-hints">
+                <span class="hint-label">推荐:</span>
+                <el-tag
+                  v-for="h in modelHints" :key="h" size="small" effect="plain"
+                  class="model-hint-tag" @click="configForm.model_id = h"
+                >{{ h }}</el-tag>
+              </div>
+            </el-form-item>
+            <el-form-item label="API Base URL">
+              <el-input v-model="configForm.api_base_url" placeholder="留空使用厂商默认地址" />
+              <div v-if="configForm.provider === 'generic'" class="form-tip" style="margin-top: 4px">
+                通用模式必须填写，如 https://api.example.com/v1
+              </div>
+            </el-form-item>
+            <el-form-item :label="isEditing ? 'API Key (新)' : 'API Key'">
+              <el-input v-model="configForm.api_key" show-password :placeholder="isEditing ? '留空不修改' : '留空使用系统 Key'" />
+            </el-form-item>
+            <el-form-item label="启用">
+              <el-switch v-model="configForm.is_enabled" />
+            </el-form-item>
+            <el-form-item label="设为默认">
+              <el-switch v-model="configForm.is_default" />
+              <span class="form-tip">同类型只能有一个默认模型</span>
+            </el-form-item>
+            <el-form-item label="额外配置">
+              <el-input v-model="configForm.extra_config" type="textarea" :rows="3" :placeholder="extraConfigPlaceholder" />
+              <div v-if="configForm.provider === 'generic'" class="form-tip" style="margin-top: 4px">
+                可配置 generate_path、poll_path、async_mode、auth_prefix 等
+              </div>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="showConfigDialog = false">取消</el-button>
+            <el-button type="primary" @click="handleSaveConfig" :loading="savingConfig">保存</el-button>
+          </template>
+        </el-dialog>
+
+        <!-- System defaults dialog -->
+        <el-dialog v-model="showSystemDefaults" title="系统默认模型" width="600px">
+          <el-empty v-if="!systemProviders.length" description="无系统默认模型" />
+          <div v-for="p in systemProviders" :key="p.name" class="sys-provider">
+            <div class="sys-provider-header">
+              <span>{{ providerIcon(p.name) }}</span>
+              <span class="sys-provider-name">{{ providerLabel(p.name) }}</span>
+              <div class="sys-provider-services">
                 <el-tag v-for="s in p.services" :key="s" size="small" effect="plain" class="svc-tag">
                   {{ serviceLabel(s) }}
                 </el-tag>
               </div>
             </div>
-            <div class="provider-body">
-              <div class="provider-meta">
-                <span v-if="p.models?.length" class="provider-models">
-                  模型: {{ p.models.map((m: any) => m.name || m.model_id).join(', ') }}
-                </span>
-                <span v-if="p.hint" class="provider-hint">
-                  Key: {{ p.hint }}
-                </span>
-              </div>
-              <div style="margin-top: 12px">
-                <template v-if="editingProvider === p.name">
-                  <div class="key-edit-row">
-                    <el-input v-model="apiKeyInput" placeholder="输入 API Key" show-password
-                      style="flex: 1; max-width: 400px" @keyup.enter="saveKey(p.name)" />
-                    <el-button type="primary" size="small" @click="saveKey(p.name)" :loading="savingKey">
-                      保存
-                    </el-button>
-                    <el-button size="small" @click="editingProvider = ''">取消</el-button>
-                  </div>
-                </template>
-                <template v-else>
-                  <el-button size="small" @click="editProvider(p)">
-                    {{ p.configured ? '修改 Key' : '配置 Key' }}
-                  </el-button>
-                </template>
-              </div>
+            <div v-if="p.models?.length" class="sys-models">
+              <span v-for="m in p.models" :key="m.model_id" class="sys-model-item">
+                {{ m.name || m.model_id }}
+              </span>
             </div>
-          </el-card>
-        </div>
-      </el-tab-pane>
-
-      <!-- 社交账号（暂时注释，后续开发时启用）
-      <el-tab-pane label="社交账号" name="social">
-        <el-card>
-          <div class="page-header">
-            <h3>已绑定的社交账号</h3>
-            <el-button type="primary" size="small" @click="showAddSocial = true">
-              <el-icon><Plus /></el-icon> 添加账号
-            </el-button>
           </div>
-          <el-table :data="socialAccounts" stripe>
-            <el-table-column prop="platform" label="平台" width="120" />
-            <el-table-column prop="account_name" label="账号名称" min-width="200" />
-            <el-table-column label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag size="small" :type="row.is_valid ? 'success' : 'danger'">
-                  {{ row.is_valid ? '有效' : '已失效' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="150">
-              <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="validateCookies(row.id)">验证</el-button>
-                <el-button text type="danger" size="small" @click="removeSocial(row.id)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-
-        <el-dialog v-model="showAddSocial" title="添加社交账号" width="500px">
-          <el-form :model="socialForm" label-width="100px">
-            <el-form-item label="平台">
-              <el-select v-model="socialForm.platform" style="width: 100%">
-                <el-option label="抖音" value="douyin" />
-                <el-option label="YouTube" value="youtube" />
-                <el-option label="小红书" value="xiaohongshu" />
-                <el-option label="快手" value="kuaishou" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="账号名称">
-              <el-input v-model="socialForm.account_name" />
-            </el-form-item>
-            <el-form-item label="Cookie">
-              <el-input v-model="socialForm.cookies" type="textarea" :rows="4" placeholder="粘贴浏览器Cookie" />
-            </el-form-item>
-          </el-form>
-          <template #footer>
-            <el-button @click="showAddSocial = false">取消</el-button>
-            <el-button type="primary" @click="addSocialAccount" :loading="addingSocial">添加</el-button>
-          </template>
         </el-dialog>
       </el-tab-pane>
-      -->
 
       <!-- 下载配置 -->
       <el-tab-pane label="下载配置" name="download">
@@ -192,34 +239,64 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import request from '../api/request'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { updateMe, changePassword as changePasswordApi } from '../api/auth'
 import { getCookieStatus, saveCookie, deleteCookie } from '../api/cookie'
+import {
+  getUserAIConfigs,
+  createUserAIConfig,
+  updateUserAIConfig,
+  deleteUserAIConfig,
+  getSystemDefaults,
+  type UserAIConfig,
+  type UserAIConfigCreate,
+  type SystemProvider,
+} from '../api/userAiConfig'
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
 const activeTab = ref('ai')
-const providers = ref<any[]>([])
-const editingProvider = ref('')
-const apiKeyInput = ref('')
-const savingKey = ref(false)
 
-// 社交账号
-// 社交账号（暂时注释，后续开发时启用）
-// const socialAccounts = ref<any[]>([])
-// const showAddSocial = ref(false)
-// const addingSocial = ref(false)
-// const socialForm = reactive({ platform: 'douyin', account_name: '', cookies: '' })
+// ── AI Config state ──────────────────────────────────────────────────────
+const configs = ref<UserAIConfig[]>([])
+const serviceTypeFilter = ref('')
+const systemProviders = ref<SystemProvider[]>([])
+const showSystemDefaults = ref(false)
+const showConfigDialog = ref(false)
+const savingConfig = ref(false)
+const isEditing = ref(false)
+const editingConfigId = ref<number | null>(null)
+const formRef = ref<FormInstance>()
 
-// 个人信息
+const configForm = reactive({
+  config_name: '',
+  provider: '',
+  custom_provider: '',
+  model_id: '',
+  service_type: 'text_generation',
+  api_base_url: '',
+  api_key: '',
+  is_enabled: true,
+  is_default: false,
+  extra_config: '',
+})
+
+const formRules: FormRules = {
+  config_name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+  service_type: [{ required: true, message: '请选择服务类型', trigger: 'change' }],
+  provider: [{ required: true, message: '请选择厂商', trigger: 'change' }],
+  model_id: [{ required: true, message: '请输入模型标识', trigger: 'blur' }],
+}
+
+// ── Personal info state ──────────────────────────────────────────────────
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ old_password: '', new_password: '' })
 const savingProfile = ref(false)
 const changingPwd = ref(false)
 
-// Cookie 配置
+// ── Cookie state ─────────────────────────────────────────────────────────
 const cookiePlatforms = ref<any[]>([])
 const showCookieDialog = ref(false)
 const editingCookiePlatform = ref('')
@@ -227,71 +304,41 @@ const editingCookieLabel = ref('')
 const cookieContent = ref('')
 const savingCookie = ref(false)
 
-onMounted(async () => {
-  loadProviders()
-  // loadSocialAccounts() // 暂时注释，后续开发时启用
-  loadCookieStatus()
-  if (authStore.user) {
-    profileForm.username = authStore.user.username || ''
-    profileForm.email = authStore.user.email || ''
-  } else {
-    try {
-      await authStore.fetchUser()
-      profileForm.username = authStore.user?.username || ''
-      profileForm.email = authStore.user?.email || ''
-    } catch { /* ignore */ }
-  }
+// ── Provider presets ─────────────────────────────────────────────────────
+
+const PROVIDER_MODEL_HINTS: Record<string, string[]> = {
+  qwen: ['qwen3.5-plus', 'qwen-max', 'qwen-turbo'],
+  doubao: ['doubao-seedream-3.0'],
+  wanx: ['wanx2.1-t2i-turbo', 'wan2.6-i2v'],
+  seedance: ['seedance-1.0-pro', 'doubao-seedance-1-5-pro-251215'],
+  nano_banana: ['gemini-2.0-flash', 'gemini-3-pro-image-preview'],
+  grok: ['grok-imagine-1.0-apimart', 'grok-imagine-1.0-edit-apimart', 'doubao-seedance-4-0'],
+  generic: [],
+  custom: [],
+}
+
+const modelHints = computed(() => {
+  return PROVIDER_MODEL_HINTS[configForm.provider] || []
 })
 
-async function loadProviders() {
-  try {
-    const res: any = await request.get('/ai/providers')
-    const list = Array.isArray(res) ? res : []
-    // Fetch key hints in parallel
-    const withKeys = await Promise.all(
-      list.map(async (p: any) => {
-        try {
-          const hint: any = await request.get(`/ai/keys/${p.name}`)
-          return { ...p, configured: hint.configured, hint: hint.hint || null }
-        } catch {
-          return { ...p, configured: false, hint: null }
-        }
-      })
-    )
-    providers.value = withKeys
-  } catch { /* ignore */ }
-}
-
-function editProvider(p: any) {
-  editingProvider.value = p.name
-  apiKeyInput.value = ''
-}
-
-async function saveKey(name: string) {
-  if (!apiKeyInput.value) return ElMessage.warning('请输入 API Key')
-  savingKey.value = true
-  try {
-    await request.post('/ai/keys', { provider: name, api_key: apiKeyInput.value })
-    ElMessage.success('保存成功')
-    editingProvider.value = ''
-    apiKeyInput.value = ''
-    loadProviders()
-  } finally {
-    savingKey.value = false
+const extraConfigPlaceholder = computed(() => {
+  if (configForm.provider === 'generic') {
+    return '{"async_mode": "auto", "poll_interval": 5, "generate_path": "/images/generations"}'
   }
-}
+  return '可选 JSON，如 {"temperature": 0.7}'
+})
 
 function providerIcon(name: string) {
   const map: Record<string, string> = {
-    qwen: '🔮', doubao: '🎨', wanx: '🎬', seedance: '🎥', nano_banana: '🍌',
+    qwen: '\uD83D\uDD2E', doubao: '\uD83C\uDFA8', wanx: '\uD83C\uDFAC', seedance: '\uD83C\uDFD5\uFE0F', nano_banana: '\uD83C\uDF4C', grok: '\u26A1', generic: '\uD83D\uDD27',
   }
-  return map[name] || '🤖'
+  return map[name] || '\uD83E\uDD16'
 }
 
 function providerLabel(name: string) {
   const map: Record<string, string> = {
     qwen: '通义千问 Qwen', doubao: '豆包 Seedream', wanx: '通义万相',
-    seedance: '豆包 Seedance', nano_banana: 'Nano Banana',
+    seedance: '豆包 Seedance', nano_banana: 'Nano Banana', grok: 'Grok (APIMart)', generic: '通用 Generic',
   }
   return map[name] || name
 }
@@ -304,37 +351,115 @@ function serviceLabel(s: string) {
   return map[s] || s
 }
 
-// async function loadSocialAccounts() {
-//   try {
-//     const res: any = await request.get('/publishing/social-accounts')
-//     socialAccounts.value = Array.isArray(res) ? res : (res.items || [])
-//   } catch { /* ignore */ }
-// }
+function serviceTagType(s: string) {
+  const map: Record<string, string> = {
+    text_generation: '', text_to_image: 'success',
+    image_to_image: 'warning', image_to_video: 'danger',
+  }
+  return map[s] || 'info'
+}
 
-// async function addSocialAccount() {
-//   addingSocial.value = true
-//   try {
-//     await request.post('/publishing/social-accounts', socialForm)
-//     ElMessage.success('添加成功')
-//     showAddSocial.value = false
-//     loadSocialAccounts()
-//   } finally {
-//     addingSocial.value = false
-//   }
-// }
+function onProviderChange() {
+  const hints = PROVIDER_MODEL_HINTS[configForm.provider]
+  if (hints?.length === 1) {
+    configForm.model_id = hints[0]
+  }
+}
 
-// async function validateCookies(id: string) {
-//   try {
-//     await request.post(`/publishing/social-accounts/${id}/validate-cookies`)
-//     ElMessage.success('Cookie 有效')
-//   } catch { /* error handled by interceptor */ }
-// }
+// ── AI Config CRUD ───────────────────────────────────────────────────────
 
-// async function removeSocial(id: string) {
-//   await request.delete(`/publishing/social-accounts/${id}`)
-//   ElMessage.success('已删除')
-//   loadSocialAccounts()
-// }
+async function loadConfigs() {
+  try {
+    const res = await getUserAIConfigs(serviceTypeFilter.value || undefined)
+    configs.value = res.items || []
+  } catch { /* ignore */ }
+}
+
+async function loadSystemDefaults() {
+  try {
+    const res = await getSystemDefaults()
+    systemProviders.value = res
+  } catch { /* ignore */ }
+}
+
+function openAddDialog() {
+  isEditing.value = false
+  editingConfigId.value = null
+  Object.assign(configForm, {
+    config_name: '', provider: 'qwen', custom_provider: '', model_id: '',
+    service_type: 'text_generation', api_base_url: '', api_key: '',
+    is_enabled: true, is_default: false, extra_config: '',
+  })
+  showConfigDialog.value = true
+}
+
+function openEditDialog(c: UserAIConfig) {
+  isEditing.value = true
+  editingConfigId.value = c.id
+  Object.assign(configForm, {
+    config_name: c.config_name,
+    provider: c.provider,
+    custom_provider: '',
+    model_id: c.model_id,
+    service_type: c.service_type,
+    api_base_url: c.api_base_url || '',
+    api_key: '',
+    is_enabled: c.is_enabled,
+    is_default: c.is_default,
+    extra_config: c.extra_config || '',
+  })
+  showConfigDialog.value = true
+}
+
+async function handleSaveConfig() {
+  if (!formRef.value) return
+  await formRef.value.validate()
+
+  savingConfig.value = true
+  try {
+    const provider = configForm.provider === 'custom' ? (configForm.custom_provider || 'custom') : configForm.provider
+
+    const payload: UserAIConfigCreate = {
+      config_name: configForm.config_name,
+      provider,
+      model_id: configForm.model_id,
+      service_type: configForm.service_type,
+      api_base_url: configForm.api_base_url || null,
+      api_key: configForm.api_key || null,
+      is_enabled: configForm.is_enabled,
+      is_default: configForm.is_default,
+      extra_config: configForm.extra_config || null,
+    }
+
+    if (isEditing.value && editingConfigId.value) {
+      await updateUserAIConfig(editingConfigId.value, payload)
+      ElMessage.success('配置已更新')
+    } else {
+      await createUserAIConfig(payload)
+      ElMessage.success('配置已创建')
+    }
+
+    showConfigDialog.value = false
+    loadConfigs()
+  } catch { /* error handled by interceptor */ } finally {
+    savingConfig.value = false
+  }
+}
+
+async function handleDelete(c: UserAIConfig) {
+  try {
+    await ElMessageBox.confirm(`确定删除配置「${c.config_name}」？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+    await deleteUserAIConfig(c.id)
+    ElMessage.success('已删除')
+    loadConfigs()
+  } catch { /* cancel or error */ }
+}
+
+// ── Personal info ────────────────────────────────────────────────────────
 
 async function saveProfile() {
   savingProfile.value = true
@@ -358,7 +483,7 @@ async function changePassword() {
   }
 }
 
-// ── Cookie 配置 ──────────────────────────────────────────────────────────
+// ── Cookie config ────────────────────────────────────────────────────────
 
 async function loadCookieStatus() {
   try {
@@ -368,9 +493,9 @@ async function loadCookieStatus() {
 
 function cookieIcon(platform: string) {
   const map: Record<string, string> = {
-    youtube: '▶️', douyin: '🎵', xiaohongshu: '📕', kuaishou: '🎬',
+    youtube: '\u25B6\uFE0F', douyin: '\uD83C\uDFB5', xiaohongshu: '\uD83D\uDCD5', kuaishou: '\uD83C\uDFAC',
   }
-  return map[platform] || '🌐'
+  return map[platform] || '\uD83C\uDF10'
 }
 
 function openCookieDialog(c: any) {
@@ -410,14 +535,185 @@ async function handleDeleteCookie(platform: string) {
     loadCookieStatus()
   } catch { /* error handled by interceptor */ }
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────
+
+onMounted(async () => {
+  loadConfigs()
+  loadSystemDefaults()
+  loadCookieStatus()
+  if (authStore.user) {
+    profileForm.username = authStore.user.username || ''
+    profileForm.email = authStore.user.email || ''
+  } else {
+    try {
+      await authStore.fetchUser()
+      profileForm.username = authStore.user?.username || ''
+      profileForm.email = authStore.user?.email || ''
+    } catch { /* ignore */ }
+  }
+})
 </script>
 
 <style scoped lang="scss">
-.provider-list {
+.ai-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ai-filter-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.config-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   max-width: 780px;
+}
+
+.config-card {
+  .config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+
+    .config-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+
+      .config-star {
+        font-size: 18px;
+      }
+
+      .config-name {
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--cyber-text);
+      }
+    }
+  }
+
+  .config-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+
+    .config-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+
+      .meta-line {
+        font-size: 12px;
+        color: var(--cyber-text-dim);
+
+        .meta-label {
+          color: var(--cyber-text-dim);
+          opacity: 0.7;
+          margin-right: 4px;
+        }
+      }
+
+      .meta-hint {
+        font-family: monospace;
+        color: var(--cyber-cyan);
+        opacity: 0.7;
+      }
+    }
+
+    .config-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+  }
+}
+
+.model-hints {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+
+  .hint-label {
+    font-size: 12px;
+    color: var(--cyber-text-dim);
+  }
+
+  .model-hint-tag {
+    cursor: pointer;
+    border-radius: 10px;
+    font-size: 12px;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+}
+
+.form-tip {
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--cyber-text-dim);
+}
+
+.sys-provider {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+
+  &:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .sys-provider-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+
+    .sys-provider-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--cyber-text);
+    }
+
+    .sys-provider-services {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+
+      .svc-tag {
+        border-radius: 10px;
+        font-size: 12px;
+      }
+    }
+  }
+
+  .sys-models {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .sys-model-item {
+      font-size: 12px;
+      color: var(--cyber-text-dim);
+      padding: 2px 8px;
+      background: var(--el-fill-color-light);
+      border-radius: 6px;
+    }
+  }
 }
 
 .cookie-platform-list {
@@ -432,7 +728,6 @@ async function handleDeleteCookie(platform: string) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
     flex-wrap: wrap;
     gap: 8px;
 
@@ -450,43 +745,6 @@ async function handleDeleteCookie(platform: string) {
         font-size: 15px;
         color: var(--cyber-text);
       }
-    }
-
-    .provider-services {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-
-      .svc-tag {
-        border-radius: 10px;
-        font-size: 12px;
-      }
-    }
-  }
-
-  .provider-body {
-    .provider-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-
-      .provider-models {
-        font-size: 12px;
-        color: var(--cyber-text-dim);
-      }
-
-      .provider-hint {
-        font-size: 12px;
-        color: var(--cyber-cyan);
-        opacity: 0.7;
-        font-family: monospace;
-      }
-    }
-
-    .key-edit-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
     }
   }
 }

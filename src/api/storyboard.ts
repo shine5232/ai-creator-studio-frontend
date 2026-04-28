@@ -35,7 +35,7 @@ export function generateShotPrompt(shotId: string) {
   return request.post(`/shots/${shotId}/generate-prompt`, {}, { timeout: 60000 } as any)
 }
 
-// 同步生成单个镜头图片
+// 生成单个镜头图片（异步任务，返回 task_id）
 export function generateShotImage(shotId: string, aspectRatio: string = '9:16') {
-  return request.post(`/shots/${shotId}/generate-image`, { aspect_ratio: aspectRatio }, { timeout: 120000 } as any)
+  return request.post(`/shots/${shotId}/generate-image`, { aspect_ratio: aspectRatio })
 }

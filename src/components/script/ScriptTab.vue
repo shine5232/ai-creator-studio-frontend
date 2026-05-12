@@ -255,8 +255,11 @@
                 <el-option label="油画" value="oil_painting" />
               </el-select>
             </el-form-item>
-            <el-form-item label="目标时长（秒）">
-              <el-input-number v-model="aiForm.duration_seconds" :min="10" :max="300" style="width: 100%" />
+            <el-form-item label="目标时长">
+              <el-input :model-value="`${projectDuration}秒`" disabled />
+            </el-form-item>
+            <el-form-item label="内容概述">
+              <el-input v-model="aiForm.story_prompt" type="textarea" :rows="4" placeholder="描述你想创作的视频故事，AI将基于此进行脚本创作" />
             </el-form-item>
             <el-form-item label="额外要求">
               <el-input v-model="aiForm.custom_prompt" type="textarea" :rows="3" placeholder="可选的额外要求" />
@@ -265,6 +268,10 @@
 
           <el-button type="primary" :loading="generating" @click="handleGenerate" style="width: 100%">
             AI 生成脚本
+          </el-button>
+
+          <el-button plain style="width: 100%; margin-top: 8px; margin-left: 0" @click="showImportDialog = true">
+            导入已有脚本
           </el-button>
 
           <el-divider style="margin: 16px 0 12px" />
@@ -318,6 +325,65 @@
           @click="showAutoDialog = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入脚本对话框 -->
+    <el-dialog v-model="showImportDialog" title="导入已有脚本" width="640px" :close-on-click-modal="false">
+      <el-form label-position="top">
+        <el-form-item label="脚本内容（粘贴您的完整脚本）">
+          <el-input v-model="importForm.content" type="textarea" :rows="10" placeholder="将您的视频脚本内容粘贴到这里..." />
+        </el-form-item>
+        <el-form-item label="脚本标题（可选，留空则 AI 自动推断）">
+          <el-input v-model="importForm.title" placeholder="可选" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="视频风格">
+              <el-select v-model="importForm.video_style" style="width: 100%">
+                <el-option label="电影级写实" value="cinematic" />
+                <el-option label="动漫风格" value="anime" />
+                <el-option label="动画风格" value="animation" />
+                <el-option label="赛博朋克" value="cyberpunk" />
+                <el-option label="油画艺术" value="oil_painting" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="目标时长（秒）">
+              <el-input-number v-model="importForm.duration_seconds" :min="10" :max="300" :step="5" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="额外要求（可选）">
+          <el-input v-model="importForm.custom_prompt" type="textarea" :rows="2" placeholder="如：角色设定、场景要求等" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importForm.content.trim()" @click="handleImport">开始分析</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导入进度弹窗 -->
+    <el-dialog v-model="importProgress.show" title="导入脚本进度" width="460px" :close-on-click-modal="false" :show-close="importProgress.status !== ''">
+      <div style="text-align: center; padding: 16px 0">
+        <el-progress :percentage="importProgress.percent" :status="importProgress.status || undefined" :stroke-width="20" :text-inside="true" style="margin-bottom: 16px" />
+        <p style="color: #606266; font-size: 14px">{{ importProgress.message }}</p>
+      </div>
+      <template #footer>
+        <el-button v-if="importProgress.status" @click="importProgress.show = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- AI 生成进度弹窗 -->
+    <el-dialog v-model="generateProgress.show" title="AI 脚本生成" width="460px" :close-on-click-modal="false" :show-close="generateProgress.status !== ''">
+      <div style="text-align: center; padding: 16px 0">
+        <el-progress :percentage="generateProgress.percent" :status="generateProgress.status || undefined" :stroke-width="20" :text-inside="true" style="margin-bottom: 16px" />
+        <p style="color: #606266; font-size: 14px">{{ generateProgress.message }}</p>
+      </div>
+      <template #footer>
+        <el-button v-if="generateProgress.status" @click="generateProgress.show = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -325,7 +391,7 @@
 import { ref, reactive, computed, watch, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Loading, Promotion } from '@element-plus/icons-vue'
-import { generateScript, updateScript } from '../../api/script'
+import { generateScript, generateScriptProgress, updateScript, importScript, importScriptSave, importScriptProgress } from '../../api/script'
 import { getReferenceContext } from '../../api/knowledge'
 import { autoGenerate, getTask } from '../../api/generation'
 import MarkdownPreview from './MarkdownPreview.vue'
@@ -334,6 +400,7 @@ const props = defineProps<{
   projectId: string
   script: any
   referenceCaseId: number | null
+  project: any
 }>()
 
 const emit = defineEmits<{
@@ -343,6 +410,29 @@ const emit = defineEmits<{
 
 const saving = ref(false)
 const generating = ref(false)
+let generatePollTimer: ReturnType<typeof setInterval> | null = null
+const generateProgress = reactive({
+  show: false,
+  percent: 0,
+  status: '' as '' | 'success' | 'exception',
+  message: '',
+})
+const importing = ref(false)
+const importProgress = reactive({
+  show: false,
+  percent: 0,
+  status: '' as '' | 'success' | 'exception',
+  message: '',
+})
+let importPollTimer: ReturnType<typeof setInterval> | null = null
+const showImportDialog = ref(false)
+const importForm = reactive({
+  content: '',
+  title: '',
+  video_style: 'cinematic',
+  duration_seconds: 60,
+  custom_prompt: '',
+})
 const scriptId = ref<string>('')
 const activeTab = ref('structured')
 const markdownPreviewRef = ref<InstanceType<typeof MarkdownPreview> | null>(null)
@@ -417,9 +507,11 @@ const aiForm = reactive({
   theme: '',
   narrative_type: 'emotional',
   video_style: 'cinematic',
-  duration_seconds: 60,
+  story_prompt: '',
   custom_prompt: '',
 })
+
+const projectDuration = computed(() => props.project?.output_duration || 60)
 
 watch(() => props.script, (s) => {
   if (s) {
@@ -460,6 +552,53 @@ async function loadReferenceContext(caseId: number) {
   }
 }
 
+async function handleImport() {
+  if (!importForm.content.trim()) {
+    ElMessage.warning('请输入脚本内容')
+    return
+  }
+  importing.value = true
+  try {
+    // 第一步：AI 分析，结果存 Redis
+    const analyzeRes: any = await importScript(props.projectId, importForm)
+    if (!analyzeRes.task_id) {
+      ElMessage.error('分析结果异常')
+      return
+    }
+    // 第二步：触发后台保存 + 分批生成 prompt
+    await importScriptSave(props.projectId)
+    // 开始轮询进度
+    importProgress.show = true
+    importProgress.percent = 0
+    importProgress.status = ''
+    importProgress.message = '正在生成提示词...'
+    if (importPollTimer) clearInterval(importPollTimer)
+    importPollTimer = setInterval(async () => {
+      try {
+        const data: any = await importScriptProgress(props.projectId)
+        importProgress.percent = data.progress ?? 0
+        importProgress.message = data.message || '处理中...'
+        if (data.status === 'completed') {
+          importProgress.status = 'success'
+          importProgress.percent = 100
+          if (importPollTimer) clearInterval(importPollTimer)
+          showImportDialog.value = false
+          ElMessage.success('脚本导入完成')
+          emit('refresh')
+        } else if (data.status === 'failed') {
+          importProgress.status = 'exception'
+          importProgress.message = data.message || '导入失败'
+          if (importPollTimer) clearInterval(importPollTimer)
+        }
+      } catch { /* ignore */ }
+    }, 2000)
+  } catch {
+    ElMessage.error('脚本导入分析失败')
+  } finally {
+    importing.value = false
+  }
+}
+
 async function handleSave() {
   if (!scriptId.value) return
   saving.value = true
@@ -479,28 +618,57 @@ async function handleGenerate() {
   }
   generating.value = true
   try {
-    const payload: any = { ...aiForm }
+    const payload: any = { ...aiForm, duration_seconds: projectDuration.value }
     if (props.referenceCaseId) {
       payload.source_case_id = props.referenceCaseId
     }
     const res: any = await generateScript(props.projectId, payload)
-    const data = res.script || res
-    form.title = data.title || ''
-    form.theme = data.theme || aiForm.theme
-    form.narrative_type = data.narrative_type || aiForm.narrative_type
-    form.content = parseContent(data.content || '')
-    scriptId.value = data.id
-    // 也从 viral_elements 字段解析（后端可能存了两份）
-    if (data.viral_elements && !viralElements.value.length) {
-      try {
-        const ve = typeof data.viral_elements === 'string'
-          ? JSON.parse(data.viral_elements)
-          : data.viral_elements
-        if (Array.isArray(ve)) viralElements.value = ve
-      } catch { /* ignore */ }
+    if (!res.task_id) {
+      // 兼容旧版同步返回
+      const data = res.script || res
+      form.title = data.title || ''
+      form.theme = data.theme || aiForm.theme
+      form.narrative_type = data.narrative_type || aiForm.narrative_type
+      form.content = parseContent(data.content || '')
+      scriptId.value = data.id
+      if (data.viral_elements && !viralElements.value.length) {
+        try {
+          const ve = typeof data.viral_elements === 'string' ? JSON.parse(data.viral_elements) : data.viral_elements
+          if (Array.isArray(ve)) viralElements.value = ve
+        } catch { /* ignore */ }
+      }
+      ElMessage.success('脚本生成成功')
+      emit('scriptLoaded', data)
+      return
     }
-    ElMessage.success('脚本生成成功')
-    emit('scriptLoaded', data)
+    // 异步模式：显示进度弹窗并轮询
+    generateProgress.show = true
+    generateProgress.percent = 0
+    generateProgress.status = ''
+    generateProgress.message = '正在生成脚本...'
+    if (generatePollTimer) clearInterval(generatePollTimer)
+    generatePollTimer = setInterval(async () => {
+      try {
+        const data: any = await generateScriptProgress(props.projectId)
+        generateProgress.percent = data.progress ?? 0
+        generateProgress.message = data.message || '处理中...'
+        if (data.status === 'completed') {
+          generateProgress.status = 'success'
+          generateProgress.percent = 100
+          if (generatePollTimer) clearInterval(generatePollTimer)
+          ElMessage.success('脚本生成完成')
+          emit('scriptLoaded', null) // 触发重新加载
+        } else if (data.status === 'failed') {
+          generateProgress.status = 'exception'
+          if (generatePollTimer) clearInterval(generatePollTimer)
+          ElMessage.error(data.message || '生成失败')
+        }
+      } catch {
+        // 轮询失败忽略
+      }
+    }, 2000)
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '生成失败')
   } finally {
     generating.value = false
   }
@@ -615,6 +783,8 @@ function onAutoDialogClosed() {
 
 onUnmounted(() => {
   stopAutoProgressPolling()
+  if (generatePollTimer) clearInterval(generatePollTimer)
+  if (importPollTimer) clearInterval(importPollTimer)
 })
 
 async function handleAutoGenerate() {
@@ -635,7 +805,7 @@ async function handleAutoGenerate() {
 
   autoGenerating.value = true
   try {
-    const params: any = { ...aiForm }
+    const params: any = { ...aiForm, duration_seconds: projectDuration.value }
     if (props.referenceCaseId) {
       params.source_case_id = props.referenceCaseId
     }

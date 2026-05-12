@@ -17,6 +17,28 @@ export function generateScript(projectId: string, data: any) {
   })
 }
 
+// AI脚本生成进度查询
+export function generateScriptProgress(projectId: string) {
+  return request.get(`/projects/${projectId}/scripts/generate/progress`)
+}
+
+// 导入已有脚本：第一步 AI 分析
+export function importScript(projectId: string, data: any) {
+  return request.post(`/projects/${projectId}/scripts/import`, data, {
+    timeout: 300000,
+  })
+}
+
+// 导入已有脚本：第二步触发保存（后台执行）
+export function importScriptSave(projectId: string) {
+  return request.post(`/projects/${projectId}/scripts/import/save`)
+}
+
+// 导入脚本进度查询
+export function importScriptProgress(projectId: string) {
+  return request.get(`/projects/${projectId}/scripts/import/progress`)
+}
+
 // 获取脚本详情
 export function getScript(scriptId: string) {
   return request.get(`/scripts/${scriptId}`)

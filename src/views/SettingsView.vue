@@ -14,17 +14,16 @@
           </el-radio-group>
           <div class="ai-filter-actions">
             <el-button type="primary" size="small" @click="openAddDialog">+ 添加模型配置</el-button>
-            <el-button size="small" @click="showSystemDefaults = true">系统默认</el-button>
           </div>
         </div>
 
         <!-- Config card list -->
         <div class="config-list">
-          <el-empty v-if="!configs.length" description="暂无自定义模型配置，点击上方按钮添加" />
-          <el-card v-for="c in configs" :key="c.id" class="config-card">
+          <el-empty v-if="!configs.length" description="暂无模型配置，点击上方按钮添加" />
+          <el-card v-for="c in sortedConfigs" :key="c.id" class="config-card" :class="{ disabled: !c.is_enabled }">
             <div class="config-header">
               <div class="config-info">
-                <span class="config-star">{{ c.is_default ? '\u2B50' : '' }}</span>
+                <span class="config-star">{{ c.is_default ? '⭐' : '' }}</span>
                 <span class="config-name">{{ c.config_name }}</span>
                 <el-tag size="small" :type="serviceTagType(c.service_type)">{{ serviceLabel(c.service_type) }}</el-tag>
                 <el-tag size="small" :type="c.is_enabled ? 'success' : 'info'">
@@ -38,7 +37,7 @@
                   <span class="meta-label">厂商:</span> {{ providerLabel(c.provider) }}
                 </span>
                 <span class="meta-line">
-                  <span class="meta-label">模型:</span> {{ c.model_id }}
+                  <span class="meta-label">模型:</span> {{ c.model_id || '未设置' }}
                 </span>
                 <span v-if="c.api_key_hint" class="meta-line meta-hint">
                   <span class="meta-label">Key:</span> {{ c.api_key_hint }}
@@ -81,8 +80,7 @@
                 <el-option label="通义万相" value="wanx" />
                 <el-option label="豆包 Seedance" value="seedance" />
                 <el-option label="Nano Banana" value="nano_banana" />
-                <el-option label="Grok (APIMart)" value="grok" />
-                <el-option label="通用 (Generic)" value="generic" />
+                <el-option label="APIMart" value="apimart" />
                 <el-option label="自定义..." value="custom" />
               </el-select>
             </el-form-item>
@@ -106,7 +104,7 @@
               </div>
             </el-form-item>
             <el-form-item :label="isEditing ? 'API Key (新)' : 'API Key'">
-              <el-input v-model="configForm.api_key" show-password :placeholder="isEditing ? '留空不修改' : '留空使用系统 Key'" />
+              <el-input v-model="configForm.api_key" show-password :placeholder="isEditing ? '留空不修改' : '输入 API Key'" />
             </el-form-item>
             <el-form-item label="启用">
               <el-switch v-model="configForm.is_enabled" />
@@ -126,27 +124,6 @@
             <el-button @click="showConfigDialog = false">取消</el-button>
             <el-button type="primary" @click="handleSaveConfig" :loading="savingConfig">保存</el-button>
           </template>
-        </el-dialog>
-
-        <!-- System defaults dialog -->
-        <el-dialog v-model="showSystemDefaults" title="系统默认模型" width="600px">
-          <el-empty v-if="!systemProviders.length" description="无系统默认模型" />
-          <div v-for="p in systemProviders" :key="p.name" class="sys-provider">
-            <div class="sys-provider-header">
-              <span>{{ providerIcon(p.name) }}</span>
-              <span class="sys-provider-name">{{ providerLabel(p.name) }}</span>
-              <div class="sys-provider-services">
-                <el-tag v-for="s in p.services" :key="s" size="small" effect="plain" class="svc-tag">
-                  {{ serviceLabel(s) }}
-                </el-tag>
-              </div>
-            </div>
-            <div v-if="p.models?.length" class="sys-models">
-              <span v-for="m in p.models" :key="m.model_id" class="sys-model-item">
-                {{ m.name || m.model_id }}
-              </span>
-            </div>
-          </div>
         </el-dialog>
       </el-tab-pane>
 
@@ -249,10 +226,8 @@ import {
   createUserAIConfig,
   updateUserAIConfig,
   deleteUserAIConfig,
-  getSystemDefaults,
   type UserAIConfig,
   type UserAIConfigCreate,
-  type SystemProvider,
 } from '../api/userAiConfig'
 import { useAuthStore } from '../stores/auth'
 
@@ -261,9 +236,14 @@ const activeTab = ref('ai')
 
 // ── AI Config state ──────────────────────────────────────────────────────
 const configs = ref<UserAIConfig[]>([])
+
+const sortedConfigs = computed(() => {
+  return [...configs.value].sort((a, b) => {
+    if (a.is_enabled !== b.is_enabled) return a.is_enabled ? -1 : 1
+    return 0
+  })
+})
 const serviceTypeFilter = ref('')
-const systemProviders = ref<SystemProvider[]>([])
-const showSystemDefaults = ref(false)
 const showConfigDialog = ref(false)
 const savingConfig = ref(false)
 const isEditing = ref(false)
@@ -312,7 +292,7 @@ const PROVIDER_MODEL_HINTS: Record<string, string[]> = {
   wanx: ['wanx2.1-t2i-turbo', 'wan2.6-i2v'],
   seedance: ['seedance-1.0-pro', 'doubao-seedance-1-5-pro-251215'],
   nano_banana: ['gemini-2.0-flash', 'gemini-3-pro-image-preview'],
-  grok: ['grok-imagine-1.0-apimart', 'grok-imagine-1.0-edit-apimart', 'doubao-seedance-4-0'],
+  apimart: ['grok-imagine-1.0-apimart', 'grok-imagine-1.0-edit-apimart', 'doubao-seedance-4-0'],
   generic: [],
   custom: [],
 }
@@ -328,17 +308,10 @@ const extraConfigPlaceholder = computed(() => {
   return '可选 JSON，如 {"temperature": 0.7}'
 })
 
-function providerIcon(name: string) {
-  const map: Record<string, string> = {
-    qwen: '\uD83D\uDD2E', doubao: '\uD83C\uDFA8', wanx: '\uD83C\uDFAC', seedance: '\uD83C\uDFD5\uFE0F', nano_banana: '\uD83C\uDF4C', grok: '\u26A1', generic: '\uD83D\uDD27',
-  }
-  return map[name] || '\uD83E\uDD16'
-}
-
 function providerLabel(name: string) {
   const map: Record<string, string> = {
     qwen: '通义千问 Qwen', doubao: '豆包 Seedream', wanx: '通义万相',
-    seedance: '豆包 Seedance', nano_banana: 'Nano Banana', grok: 'Grok (APIMart)', generic: '通用 Generic',
+    seedance: '豆包 Seedance', nano_banana: 'Nano Banana', apimart: 'APIMart',
   }
   return map[name] || name
 }
@@ -372,13 +345,6 @@ async function loadConfigs() {
   try {
     const res = await getUserAIConfigs(serviceTypeFilter.value || undefined)
     configs.value = res.items || []
-  } catch { /* ignore */ }
-}
-
-async function loadSystemDefaults() {
-  try {
-    const res = await getSystemDefaults()
-    systemProviders.value = res
   } catch { /* ignore */ }
 }
 
@@ -493,9 +459,9 @@ async function loadCookieStatus() {
 
 function cookieIcon(platform: string) {
   const map: Record<string, string> = {
-    youtube: '\u25B6\uFE0F', douyin: '\uD83C\uDFB5', xiaohongshu: '\uD83D\uDCD5', kuaishou: '\uD83C\uDFAC',
+    youtube: '▶️', douyin: '🎵', xiaohongshu: '📕', kuaishou: '🎬',
   }
-  return map[platform] || '\uD83C\uDF10'
+  return map[platform] || '🌐'
 }
 
 function openCookieDialog(c: any) {
@@ -540,7 +506,6 @@ async function handleDeleteCookie(platform: string) {
 
 onMounted(async () => {
   loadConfigs()
-  loadSystemDefaults()
   loadCookieStatus()
   if (authStore.user) {
     profileForm.username = authStore.user.username || ''
@@ -578,6 +543,9 @@ onMounted(async () => {
 }
 
 .config-card {
+  &.disabled {
+    opacity: 0.5;
+  }
   .config-header {
     display: flex;
     align-items: center;
@@ -665,55 +633,6 @@ onMounted(async () => {
   margin-left: 12px;
   font-size: 12px;
   color: var(--cyber-text-dim);
-}
-
-.sys-provider {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-
-  &:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-  }
-
-  .sys-provider-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-
-    .sys-provider-name {
-      font-weight: 600;
-      font-size: 14px;
-      color: var(--cyber-text);
-    }
-
-    .sys-provider-services {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-
-      .svc-tag {
-        border-radius: 10px;
-        font-size: 12px;
-      }
-    }
-  }
-
-  .sys-models {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-
-    .sys-model-item {
-      font-size: 12px;
-      color: var(--cyber-text-dim);
-      padding: 2px 8px;
-      background: var(--el-fill-color-light);
-      border-radius: 6px;
-    }
-  }
 }
 
 .cookie-platform-list {

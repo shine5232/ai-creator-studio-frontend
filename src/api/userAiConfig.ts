@@ -47,12 +47,6 @@ export interface UserAIConfigListResponse {
   total: number
 }
 
-export interface SystemProvider {
-  name: string
-  services: string[]
-  models: { model_id: string; name: string; capabilities: string[] }[]
-}
-
 // --- API calls ---
 
 export function getUserAIConfigs(serviceType?: string) {
@@ -75,8 +69,4 @@ export function updateUserAIConfig(id: number, data: UserAIConfigUpdate) {
 
 export function deleteUserAIConfig(id: number) {
   return request.delete(`/user-ai-configs/${id}`) as Promise<{ success: boolean; message: string }>
-}
-
-export function getSystemDefaults() {
-  return request.get('/user-ai-configs/system-defaults') as Promise<SystemProvider[]>
 }

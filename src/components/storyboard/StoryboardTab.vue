@@ -48,6 +48,9 @@
             <div v-else-if="char.reference_image_path" class="char-image-single" @click.stop="previewImage(imageUrl(char.reference_image_path))">
               <el-image :src="imageUrl(char.reference_image_path)" fit="cover" class="ref-img" />
             </div>
+            <div v-else-if="char.user_reference_image_path" class="char-image-single" @click.stop="previewImage(imageUrl(char.user_reference_image_path))">
+              <el-image :src="imageUrl(char.user_reference_image_path)" fit="cover" class="ref-img" style="opacity: 0.7" />
+            </div>
             <div v-else class="char-placeholder">
               <el-icon :size="48" color="#5a6a7e"><User /></el-icon>
               <span class="placeholder-text">待生成参考图</span>
@@ -78,108 +81,114 @@
     <!-- 人物详情抽屉 -->
     <el-drawer v-model="showCharDetail" title="人物详情" size="500px">
       <template v-if="selectedCharacter">
-        <!-- 4角度图片展示 -->
-        <div v-if="selectedCharacter.reference_images && selectedCharacter.reference_images.length" class="detail-angles">
-          <div v-for="angle in ['front', 'left', 'right', 'back']" :key="angle" class="detail-angle-cell" @click="getAngleImage(selectedCharacter, angle) && previewImage(imageUrl(getAngleImage(selectedCharacter, angle)))">
-            <el-image
-              v-if="getAngleImage(selectedCharacter, angle)"
-              :src="imageUrl(getAngleImage(selectedCharacter, angle))"
-              fit="contain"
-              class="detail-angle-img"
-            />
-            <div v-else class="detail-angle-empty">
-              <el-icon :size="24" color="#5a6a7e"><User /></el-icon>
+        <!-- AI 生成的4角度参考图 -->
+        <div style="margin-bottom: 16px">
+          <div style="color: #909399; font-size: 12px; margin-bottom: 6px">AI 生成的参考图</div>
+          <div v-if="selectedCharacter.reference_images && selectedCharacter.reference_images.length" class="detail-angles">
+            <div v-for="angle in ['front', 'left', 'right', 'back']" :key="angle" class="detail-angle-cell" @click="getAngleImage(selectedCharacter, angle) && previewImage(imageUrl(getAngleImage(selectedCharacter, angle)))">
+              <el-image
+                v-if="getAngleImage(selectedCharacter, angle)"
+                :src="imageUrl(getAngleImage(selectedCharacter, angle))"
+                fit="contain"
+                class="detail-angle-img"
+              />
+              <div v-else class="detail-angle-empty">
+                <el-icon :size="24" color="#5a6a7e"><User /></el-icon>
+              </div>
+              <span class="detail-angle-label">{{ angleLabel(angle) }}</span>
             </div>
-            <span class="detail-angle-label">{{ angleLabel(angle) }}</span>
+          </div>
+          <div v-else-if="selectedCharacter.reference_image_path" class="char-detail-image">
+            <el-image :src="imageUrl(selectedCharacter.reference_image_path)" fit="contain" class="detail-ref-img" @click="previewImage(imageUrl(selectedCharacter.reference_image_path))" />
+          </div>
+          <div v-else class="char-detail-image" style="min-height: 80px">
+            <div class="detail-placeholder">
+              <el-icon :size="32" color="#5a6a7e"><User /></el-icon>
+              <span>暂无生成图</span>
+            </div>
           </div>
         </div>
-        <div v-else-if="selectedCharacter.reference_image_path" class="char-detail-image">
-          <el-image :src="imageUrl(selectedCharacter.reference_image_path)" fit="contain" class="detail-ref-img" @click="previewImage(imageUrl(selectedCharacter.reference_image_path))" />
-        </div>
-        <div v-else class="char-detail-image">
-          <div class="detail-placeholder">
-            <el-icon :size="64" color="#5a6a7e"><User /></el-icon>
-            <span>暂无参考图</span>
+
+        <!-- 用户上传的参考图 -->
+        <div style="margin-bottom: 16px">
+          <div style="color: #909399; font-size: 12px; margin-bottom: 6px">
+            参考图片（上传后作为生成参考）
+          </div>
+          <div class="detail-preview-box" style="position: relative; min-height: 120px">
+            <el-image v-if="selectedCharacter.user_reference_image_path" :src="imageUrl(selectedCharacter.user_reference_image_path)" fit="contain"
+              class="detail-ref-img" @click="previewImage(imageUrl(selectedCharacter.user_reference_image_path))" />
+            <div v-else class="detail-placeholder" style="min-height: 120px">
+              <el-icon :size="32" color="#5a6a7e"><User /></el-icon>
+              <span>暂无参考图</span>
+            </div>
+            <el-upload
+              :auto-upload="false"
+              :show-file-list="false"
+              accept="image/*"
+              :on-change="(file: any) => handleUploadCharImage(file)"
+              style="position: absolute; bottom: 8px; right: 8px"
+            >
+              <el-button size="small" type="primary" :loading="uploadingCharImage">
+                {{ selectedCharacter.user_reference_image_path ? '更换参考图' : '上传参考图' }}
+              </el-button>
+            </el-upload>
           </div>
         </div>
 
         <el-form label-position="top" style="margin-top: 16px">
-          <el-form-item label="姓名">
-            <el-input v-model="charEditForm.name" />
-          </el-form-item>
-          <el-form-item label="角色类型">
-            <el-input v-model="charEditForm.role_type" />
-          </el-form-item>
           <el-row :gutter="12">
-            <el-col :span="8">
-              <el-form-item label="年龄">
-                <el-input-number v-model="charEditForm.age" :min="0" :max="150" style="width: 100%" />
+            <el-col :span="12">
+              <el-form-item label="视频风格">
+                <el-select v-model="charEditForm.video_style" placeholder="选择视频风格" style="width: 100%">
+                  <el-option label="电影级写实" value="cinematic" />
+                  <el-option label="动漫风格" value="anime" />
+                  <el-option label="动画风格" value="animation" />
+                  <el-option label="赛博朋克" value="cyberpunk" />
+                  <el-option label="油画艺术" value="oil_painting" />
+                </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
-              <el-form-item label="性别">
-                <el-input v-model="charEditForm.gender" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="国籍/种族">
-                <el-input v-model="charEditForm.nationality" />
+            <el-col :span="12">
+              <el-form-item label="图片宽高比">
+                <el-radio-group v-model="charEditForm.aspect_ratio">
+                  <el-radio value="9:16">9:16（竖屏）</el-radio>
+                  <el-radio value="16:9">16:9（横屏）</el-radio>
+                </el-radio-group>
               </el-form-item>
             </el-col>
           </el-row>
-          <el-form-item label="肤色">
-            <el-input v-model="charEditForm.skin_tone" />
-          </el-form-item>
-          <el-form-item label="外貌特征">
-            <el-input v-model="charEditForm.appearance" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-form-item label="特殊标记">
-            <el-input v-model="charEditForm.ethnic_features" />
-          </el-form-item>
-          <el-form-item label="性格特点">
-            <el-input v-model="charEditForm.personality" />
-          </el-form-item>
-          <el-form-item label="穿着描述">
-            <el-input v-model="charEditForm.clothing" type="textarea" :rows="2" />
-          </el-form-item>
 
-          <el-divider />
+          <el-divider content-position="left">4角度提示词</el-divider>
+          <div v-if="selectedCharacter.reference_images && selectedCharacter.reference_images.length" class="angle-prompts-section">
+            <div v-for="img in selectedCharacter.reference_images" :key="img.id" class="angle-prompt-item">
+              <div class="angle-prompt-header">
+                <el-tag size="small" :type="img.status === 'completed' ? 'success' : img.status === 'failed' ? 'danger' : 'info'">
+                  {{ { front: '正面', left: '左侧', right: '右侧', back: '背面' }[img.angle] || img.angle }}
+                </el-tag>
+                <el-tag v-if="img.status === 'completed'" size="small" type="success">已生成</el-tag>
+                <el-tag v-else-if="img.status === 'failed'" size="small" type="danger">失败</el-tag>
+                <el-tag v-else size="small" type="info">{{ img.status }}</el-tag>
+              </div>
+              <el-input
+                v-model="img.prompt_cn"
+                type="textarea"
+                :rows="5"
+                placeholder="该角度的文生图提示词"
+                class="angle-prompt-textarea"
+              />
+            </div>
+          </div>
+          <div v-else class="angle-prompts-empty">
+            <span style="color: var(--el-text-color-secondary); font-size: 13px;">点击「生成4角度图」后将自动生成各角度提示词</span>
+          </div>
 
-          <el-form-item label="视频风格">
-            <el-select v-model="charEditForm.video_style" placeholder="选择视频风格">
-              <el-option label="电影级写实" value="cinematic" />
-              <el-option label="动漫风格" value="anime" />
-              <el-option label="动画风格" value="animation" />
-              <el-option label="赛博朋克" value="cyberpunk" />
-              <el-option label="油画艺术" value="oil_painting" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="参考图提示词">
-            <el-input v-model="charEditForm.reference_prompt_cn" type="textarea" :rows="4" placeholder="用于文生图的提示词，留空则自动生成" />
-          </el-form-item>
-          <el-form-item label="图片宽高比">
-            <el-radio-group v-model="charEditForm.aspect_ratio">
-              <el-radio value="9:16">9:16（竖屏）</el-radio>
-              <el-radio value="16:9">16:9（横屏）</el-radio>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="handleSaveCharacter" :loading="savingChar">保存修改</el-button>
+          <el-form-item style="margin-top: 12px;">
+            <el-button type="primary" @click="handleSaveCharacter" :loading="savingChar">保存</el-button>
             <el-button @click="handleGenCharImage(selectedCharacter)" :loading="imageLoading === 'char-' + selectedCharacter.id">
-              {{ selectedCharacter.reference_images && selectedCharacter.reference_images.length ? '重新生成4角度图' : '生成4角度图' }}
+              {{ selectedCharacter.reference_images && selectedCharacter.reference_images.length ? '重新生成4角度图' : (selectedCharacter.user_reference_image_path ? '参照生成4角度图' : '生成4角度图') }}
             </el-button>
           </el-form-item>
         </el-form>
-
-        <div v-if="selectedCharacter.periods && selectedCharacter.periods.length" class="detail-periods">
-          <h4>穿着变化</h4>
-          <el-timeline>
-            <el-timeline-item v-for="period in selectedCharacter.periods" :key="period.id"
-              :timestamp="period.period_name" placement="top">
-              {{ period.clothing_delta || '无描述' }}
-            </el-timeline-item>
-          </el-timeline>
-        </div>
       </template>
     </el-drawer>
 
@@ -227,6 +236,26 @@
         <el-form-item label="参考图提示词">
           <el-input v-model="addCharForm.reference_prompt_cn" type="textarea" :rows="3" placeholder="文生图提示词，留空则可后续由 AI 自动生成" />
         </el-form-item>
+        <el-form-item label="上传参考图">
+          <el-upload
+            :auto-upload="false"
+            :show-file-list="false"
+            accept="image/*"
+            :on-change="handleAddCharImageChange"
+          >
+            <div v-if="addCharPreviewUrl" class="upload-preview" @click.stop>
+              <el-image :src="addCharPreviewUrl" fit="cover" class="upload-preview-img" />
+              <div class="upload-preview-overlay">
+                <el-icon :size="20" color="#fff"><RefreshRight /></el-icon>
+                <span>更换图片</span>
+              </div>
+            </div>
+            <div v-else class="upload-trigger">
+              <el-icon :size="28" color="#5a6a7e"><Plus /></el-icon>
+              <span>点击上传参考图</span>
+            </div>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showAddCharDialog = false">取消</el-button>
@@ -244,6 +273,7 @@
         <el-card v-for="scene in scenes" :key="scene.id" class="scene-card" shadow="hover" @click="openSceneDetail(scene)">
           <div class="scene-image" @click.stop="previewSceneImage(scene)">
             <el-image v-if="scene.image_path" :src="imageUrl(scene.image_path)" fit="cover" class="scene-img" />
+            <el-image v-else-if="scene.reference_image_path" :src="imageUrl(scene.reference_image_path)" fit="cover" class="scene-img" style="opacity: 0.7" />
             <div v-else class="scene-placeholder">
               <el-icon :size="32" color="#5a6a7e"><Picture /></el-icon>
               <span class="placeholder-text">待生成</span>
@@ -277,6 +307,26 @@
       <el-form :model="addSceneForm" label-position="top">
         <el-form-item label="场景名称" required>
           <el-input v-model="addSceneForm.name" placeholder="如：出租屋、海滩" />
+        </el-form-item>
+        <el-form-item label="上传场景图片">
+          <el-upload
+            :auto-upload="false"
+            :show-file-list="false"
+            accept="image/*"
+            :on-change="handleAddSceneImageChange"
+          >
+            <div v-if="addScenePreviewUrl" class="upload-preview" @click.stop>
+              <el-image :src="addScenePreviewUrl" fit="cover" class="upload-preview-img" />
+              <div class="upload-preview-overlay">
+                <el-icon :size="20" color="#fff"><RefreshRight /></el-icon>
+                <span>更换图片</span>
+              </div>
+            </div>
+            <div v-else class="upload-trigger">
+              <el-icon :size="28" color="#5a6a7e"><Plus /></el-icon>
+              <span>点击上传场景图片</span>
+            </div>
+          </el-upload>
         </el-form-item>
         <el-form-item label="地点">
           <el-input v-model="addSceneForm.location" placeholder="如：城市边缘、烟台金沙滩" />
@@ -364,12 +414,42 @@
     <!-- 场景详情抽屉 -->
     <el-drawer v-model="showSceneDetail" title="场景详情" size="500px">
       <template v-if="selectedScene">
-        <div class="detail-preview-box">
-          <el-image v-if="selectedScene.image_path" :src="imageUrl(selectedScene.image_path)" fit="contain"
-            class="detail-ref-img" @click="previewImage(imageUrl(selectedScene.image_path))" />
-          <div v-else class="detail-placeholder">
-            <el-icon :size="64" color="#5a6a7e"><Picture /></el-icon>
-            <span>暂无场景图片</span>
+        <!-- AI 生成的场景图 -->
+        <div style="margin-bottom: 16px">
+          <div style="color: #909399; font-size: 12px; margin-bottom: 6px">AI 生成的场景图</div>
+          <div class="detail-preview-box" style="position: relative">
+            <el-image v-if="selectedScene.image_path" :src="imageUrl(selectedScene.image_path)" fit="contain"
+              class="detail-ref-img" @click="previewImage(imageUrl(selectedScene.image_path))" />
+            <div v-else class="detail-placeholder">
+              <el-icon :size="64" color="#5a6a7e"><Picture /></el-icon>
+              <span>暂无生成图片</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 用户上传的参考图 -->
+        <div style="margin-bottom: 16px">
+          <div style="color: #909399; font-size: 12px; margin-bottom: 6px">
+            参考图片（上传后作为生成参考）
+          </div>
+          <div class="detail-preview-box" style="position: relative; min-height: 120px">
+            <el-image v-if="selectedScene.reference_image_path" :src="imageUrl(selectedScene.reference_image_path)" fit="contain"
+              class="detail-ref-img" @click="previewImage(imageUrl(selectedScene.reference_image_path))" />
+            <div v-else class="detail-placeholder" style="min-height: 120px">
+              <el-icon :size="32" color="#5a6a7e"><Picture /></el-icon>
+              <span>暂无参考图</span>
+            </div>
+            <el-upload
+              :auto-upload="false"
+              :show-file-list="false"
+              accept="image/*"
+              :on-change="(file: any) => handleUploadSceneImage(file)"
+              style="position: absolute; bottom: 8px; right: 8px"
+            >
+              <el-button size="small" type="primary" :loading="uploadingSceneImage">
+                {{ selectedScene.reference_image_path ? '更换参考图' : '上传参考图' }}
+              </el-button>
+            </el-upload>
           </div>
         </div>
 
@@ -403,9 +483,6 @@
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleSaveScene" :loading="savingScene">保存修改</el-button>
-            <el-button @click="handleGenSceneImage(selectedScene)" :loading="imageLoading === 'scene-' + selectedScene.id">
-              {{ selectedScene.image_path ? '重新生成图片' : '生成图片' }}
-            </el-button>
           </el-form-item>
         </el-form>
       </template>
@@ -526,7 +603,7 @@
     </el-dialog>
 
     <!-- 图片预览弹窗 -->
-    <el-dialog v-model="showImagePreview" title="图片预览" width="auto" style="max-width: 90vw">
+    <el-dialog v-model="showImagePreview" title="图片预览" width="auto" style="max-width: 90vw" align-center>
       <div style="text-align: center">
         <img :src="previewImageUrl" style="max-width: 100%; max-height: 75vh; object-fit: contain" />
       </div>
@@ -537,16 +614,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Picture, User } from '@element-plus/icons-vue'
+import { Picture, User, Plus, RefreshRight } from '@element-plus/icons-vue'
 import {
   createStoryboard, updateShot, regenerateImage, regenerateVideo,
   generateShotPrompt, generateShotImage,
 } from '../../api/storyboard'
 import {
-  getCharacters, createCharacter, updateCharacter, generateCharMultiAngle,
+  getCharacters, createCharacter, updateCharacter, generateCharMultiAngle, uploadCharacterImage, updateRefImagePrompt,
 } from '../../api/character'
 import {
-  getScenes, createScene, deleteScene, generateSceneImage as generateSceneImageApi,
+  getScenes, createScene, updateScene, deleteScene, generateSceneImage as generateSceneImageApi, uploadSceneImage,
 } from '../../api/scene'
 import {
   batchGenerateCharacterImages, batchGenerateShotImages, batchGenerateShotPrompts, getTask,
@@ -594,6 +671,8 @@ const addCharForm = reactive({
   video_style: 'cinematic',
   reference_prompt_cn: '',
 })
+const addCharImageFile = ref<File | null>(null)
+const addCharPreviewUrl = ref('')
 
 // 场景参照
 const scenes = ref<any[]>([])
@@ -607,6 +686,10 @@ const addSceneForm = reactive({
   mood: '',
   image_prompt: '',
 })
+const addSceneImageFile = ref<File | null>(null)
+const addScenePreviewUrl = ref('')
+const uploadingSceneImage = ref(false)
+const uploadingCharImage = ref(false)
 
 // 批量生成
 const batchCharLoading = ref(false)
@@ -649,17 +732,6 @@ const editForm = reactive({
 })
 
 const charEditForm = reactive({
-  name: '',
-  role_type: '',
-  age: null as number | null,
-  gender: '',
-  nationality: '',
-  skin_tone: '',
-  appearance: '',
-  ethnic_features: '',
-  personality: '',
-  clothing: '',
-  reference_prompt_cn: '',
   aspect_ratio: '9:16',
   video_style: 'cinematic',
 })
@@ -687,6 +759,7 @@ async function loadCharacters() {
   try {
     const res: any = await getCharacters(props.projectId)
     characters.value = res.items || res.data || res || []
+    console.log('[loadCharacters] loaded', characters.value.length, 'chars, video_styles:', characters.value.map((c: any) => `${c.name}=${c.video_style}`))
   } catch {
     characters.value = []
   }
@@ -740,20 +813,11 @@ function rebuildCharacterAngles() {
 }
 
 function openCharDetail(char: any) {
+  console.log('[openCharDetail] char.video_style=', char.video_style, 'char.id=', char.id, 'full char keys=', Object.keys(char))
   selectedCharacter.value = char
-  charEditForm.name = char.name || ''
-  charEditForm.role_type = char.role_type || ''
-  charEditForm.age = char.age || null
-  charEditForm.gender = char.gender || ''
-  charEditForm.nationality = char.nationality || ''
-  charEditForm.skin_tone = char.skin_tone || ''
-  charEditForm.appearance = char.appearance || ''
-  charEditForm.ethnic_features = char.ethnic_features || ''
-  charEditForm.personality = char.personality || ''
-  charEditForm.clothing = char.clothing || ''
-  charEditForm.reference_prompt_cn = char.reference_prompt_cn || ''
   charEditForm.aspect_ratio = '9:16'
   charEditForm.video_style = char.video_style || 'cinematic'
+  console.log('[openCharDetail] charEditForm.video_style set to:', charEditForm.video_style)
   showCharDetail.value = true
 }
 
@@ -793,6 +857,18 @@ function resetAddCharForm() {
   addCharForm.clothing = ''
   addCharForm.video_style = 'cinematic'
   addCharForm.reference_prompt_cn = ''
+  addCharImageFile.value = null
+  if (addCharPreviewUrl.value) {
+    URL.revokeObjectURL(addCharPreviewUrl.value)
+    addCharPreviewUrl.value = ''
+  }
+}
+
+function handleAddCharImageChange(file: any) {
+  const raw = file.raw as File
+  addCharImageFile.value = raw
+  if (addCharPreviewUrl.value) URL.revokeObjectURL(addCharPreviewUrl.value)
+  addCharPreviewUrl.value = URL.createObjectURL(raw)
 }
 
 async function handleAddCharacter() {
@@ -802,7 +878,11 @@ async function handleAddCharacter() {
   }
   addingChar.value = true
   try {
-    await createCharacter(props.projectId, { ...addCharForm })
+    const res: any = await createCharacter(props.projectId, { ...addCharForm })
+    const charId = res?.id
+    if (charId && addCharImageFile.value) {
+      await uploadCharacterImage(charId, addCharImageFile.value)
+    }
     ElMessage.success('人物添加成功')
     showAddCharDialog.value = false
     await loadCharacters()
@@ -844,6 +924,18 @@ function resetAddSceneForm() {
   addSceneForm.tone = ''
   addSceneForm.mood = ''
   addSceneForm.image_prompt = ''
+  addSceneImageFile.value = null
+  if (addScenePreviewUrl.value) {
+    URL.revokeObjectURL(addScenePreviewUrl.value)
+    addScenePreviewUrl.value = ''
+  }
+}
+
+function handleAddSceneImageChange(file: any) {
+  const raw = file.raw as File
+  addSceneImageFile.value = raw
+  if (addScenePreviewUrl.value) URL.revokeObjectURL(addScenePreviewUrl.value)
+  addScenePreviewUrl.value = URL.createObjectURL(raw)
 }
 
 async function handleAddScene() {
@@ -853,7 +945,11 @@ async function handleAddScene() {
   }
   addingScene.value = true
   try {
-    await createScene(props.projectId, { ...addSceneForm })
+    const res: any = await createScene(props.projectId, { ...addSceneForm })
+    const sceneId = res?.id
+    if (sceneId && addSceneImageFile.value) {
+      await uploadSceneImage(sceneId, addSceneImageFile.value)
+    }
     ElMessage.success('场景添加成功')
     showAddSceneDialog.value = false
     await loadScenes()
@@ -875,12 +971,12 @@ async function handleGenSceneImage(scene: any) {
     const data: any = await generateSceneImageApi(scene.id)
     if (data.task_id) {
       startProgressPolling(data.task_id, `生成场景「${scene.name}」图片`, 1)
-    } else if (data.image_path) {
+    } else {
       ElMessage.success('场景图片生成成功')
       await loadScenes()
     }
-  } catch {
-    ElMessage.error('场景图片生成失败')
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '场景图片生成失败')
   } finally {
     imageLoading.value = null
   }
@@ -928,6 +1024,38 @@ async function handleSaveScene() {
   }
 }
 
+async function handleUploadSceneImage(file: any) {
+  if (!selectedScene.value) return
+  uploadingSceneImage.value = true
+  try {
+    await uploadSceneImage(selectedScene.value.id, file.raw as File)
+    ElMessage.success('场景图片上传成功')
+    const scenes = await getScenes(props.projectId)
+    const res: any = scenes
+    const list = res.items || res.data || res || []
+    const updated = list.find((s: any) => s.id === selectedScene.value.id)
+    if (updated) selectedScene.value = updated
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '图片上传失败')
+  } finally {
+    uploadingSceneImage.value = false
+  }
+}
+
+async function handleUploadCharImage(file: any) {
+  if (!selectedCharacter.value) return
+  uploadingCharImage.value = true
+  try {
+    await uploadCharacterImage(selectedCharacter.value.id, file.raw as File)
+    ElMessage.success('参考图上传成功')
+    await refreshSelectedCharacter()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.detail || '参考图上传失败')
+  } finally {
+    uploadingCharImage.value = false
+  }
+}
+
 function getAngleImage(char: any, angle: string): string | null {
   if (!char.reference_images) return null
   const ref = char.reference_images.find((r: any) => r.angle === angle && r.image_path && r.status === 'completed')
@@ -943,12 +1071,39 @@ async function handleSaveCharacter() {
   if (!selectedCharacter.value) return
   savingChar.value = true
   try {
-    const { aspect_ratio, ...data } = charEditForm
-    await updateCharacter(selectedCharacter.value.id, data)
+    console.log('[保存] charEditForm.video_style=', charEditForm.video_style, 'charId=', selectedCharacter.value.id)
+    // 保存视频风格
+    const res1 = await updateCharacter(selectedCharacter.value.id, { video_style: charEditForm.video_style })
+    console.log('[保存] updateCharacter response:', res1)
+    // 保存所有角度提示词
+    const refImages = selectedCharacter.value.reference_images || []
+    if (refImages.length > 0) {
+      const res2 = await Promise.all(refImages.map((img: any) =>
+        updateRefImagePrompt(img.id, { prompt_cn: img.prompt_cn || '' })
+      ))
+      console.log('[保存] angle prompts saved:', res2.length)
+    }
     ElMessage.success('已保存')
-    loadCharacters()
+    await refreshSelectedCharacter()
+  } catch (e: any) {
+    console.error('[保存] error:', e)
+    ElMessage.error('保存失败')
   } finally {
     savingChar.value = false
+  }
+}
+
+async function refreshSelectedCharacter() {
+  if (!selectedCharacter.value) return
+  const res: any = await getCharacters(props.projectId)
+  const list = res.items || res.data || res || []
+  const updated = list.find((c: any) => c.id === selectedCharacter.value.id)
+  if (updated) {
+    selectedCharacter.value = updated
+    charEditForm.video_style = updated.video_style || 'cinematic'
+    // 同步更新 characters 数组，避免关闭抽屉后再打开用旧数据
+    const idx = characters.value.findIndex((c: any) => c.id === updated.id)
+    if (idx !== -1) characters.value[idx] = updated
   }
 }
 
@@ -977,29 +1132,13 @@ async function handleGenShotImage(shot: any) {
   const key = `shot-${shot.id}`
   imageLoading.value = key
   try {
-    const res = await generateShotImage(shot.id)
+    const res: any = await generateShotImage(shot.id)
     const taskId = res?.task_id
     if (taskId) {
-      // Poll task status until completed
-      for (let i = 0; i < 120; i++) {
-        await new Promise(r => setTimeout(r, 3000))
-        const task = await getTask(taskId)
-        if (task.status === 'completed' || task.status === 'success') {
-          ElMessage.success('图片生成成功')
-          emit('refresh')
-          return
-        }
-        if (task.status === 'failed') {
-          ElMessage.error('图片生成失败: ' + (task.error_message || '未知错误'))
-          emit('refresh')
-          return
-        }
-      }
-      ElMessage.warning('图片生成超时，请稍后刷新查看')
+      startProgressPolling(taskId, '生成分镜图片', res.total || 1)
     } else {
-      ElMessage.success('图片生成任务已提交')
+      ElMessage.info(res?.message || '无需生成')
     }
-    emit('refresh')
   } catch {
     ElMessage.error('图片生成失败')
   } finally {
@@ -1043,6 +1182,7 @@ function startProgressPolling(taskId: string, title: string, total: number) {
         progressMessage.value = '生成完成'
         stopPolling()
         loadCharacters()
+        loadScenes()
         emit('refresh')
       } else if (data.status === 'failed') {
         progressStatus.value = 'failed'
@@ -1064,6 +1204,7 @@ function stopPolling() {
 
 function onProgressDialogClosed() {
   loadCharacters()
+  loadScenes()
   emit('refresh')
 }
 
@@ -1649,5 +1790,95 @@ function shotStatusLabel(shot: any) {
   min-width: 60px;
   font-size: 14px;
   color: #303133;
+}
+
+/* 上传组件样式 */
+.upload-trigger {
+  width: 100%;
+  height: 160px;
+  border: 1px dashed var(--cyber-border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  background: var(--cyber-bg-input);
+
+  &:hover {
+    border-color: var(--cyber-cyan);
+  }
+
+  span {
+    font-size: 13px;
+    color: var(--cyber-text-dim);
+  }
+}
+
+.upload-preview {
+  width: 100%;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+
+  .upload-preview-img {
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-preview-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+
+    span {
+      font-size: 12px;
+      color: #fff;
+    }
+  }
+
+  &:hover .upload-preview-overlay {
+    opacity: 1;
+  }
+}
+
+.angle-prompts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.angle-prompt-item {
+  background: var(--cyber-bg-input, #0a0f18);
+  border: 1px solid var(--cyber-border, #1b2838);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.angle-prompt-textarea :deep(.el-textarea__inner) {
+  min-height: 120px !important;
+}
+
+.angle-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.angle-prompts-empty {
+  padding: 12px 0;
 }
 </style>

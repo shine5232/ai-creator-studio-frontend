@@ -22,5 +22,14 @@ export function deleteScene(sceneId: string) {
 
 // 生成场景参照图
 export function generateSceneImage(sceneId: string) {
-  return request.post(`/scenes/${sceneId}/generate-image`, {}, { timeout: 120000 } as any)
+  return request.post(`/scenes/${sceneId}/generate-image`, {}, { timeout: 30000 } as any)
+}
+
+// 上传场景参照图
+export function uploadSceneImage(sceneId: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post(`/scenes/${sceneId}/upload-image`, formData, {
+    timeout: 60000,
+  } as any)
 }

@@ -29,3 +29,17 @@ export function generateCharRefImage(characterId: string, data?: { provider?: st
 export function generateCharMultiAngle(characterId: string, data?: { aspect_ratio?: string }) {
   return request.post(`/characters/${characterId}/generate-multi-angle`, data || {}, { timeout: 30000 } as any)
 }
+
+// 上传角色参考图
+export function uploadCharacterImage(characterId: string, file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post(`/characters/${characterId}/upload-image`, formData, {
+    timeout: 60000,
+  } as any)
+}
+
+// 更新角色角度提示词
+export function updateRefImagePrompt(imageId: string, data: { prompt_cn?: string }) {
+  return request.put(`/reference-images/${imageId}`, data)
+}
